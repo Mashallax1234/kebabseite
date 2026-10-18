@@ -1,12 +1,12 @@
 // Alles, was man an der Seite ohne Code-Kenntnisse anpassen möchte.
 
 export const SITE = {
-  name: 'Hallahsams Dönerliste',
+  name: 'Kebabranking',
   tagline: 'jeder Döner in der Gegend. selbst gegessen, ehrlich bewertet.',
   admin: 'Hallahsam',
-  city: 'Berlin',
+  city: 'Stuttgart',
   /** [lat, lng] – nur Startpunkt, die Karte zoomt danach auf alle Läden */
-  mapCenter: [52.508, 13.405] as [number, number],
+  mapCenter: [48.7904, 9.1895] as [number, number],
   mapZoom: 12,
 }
 
