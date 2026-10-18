@@ -11,6 +11,7 @@ import { activeCriteria, aggregate, buildRanking, ratingOverall } from '@/lib/sc
 import { fmtDate, fmtNum, fmtPrice, fmtScore, genitive, nameOf, plural } from '@/lib/format'
 import { SITE } from '@/lib/config'
 import { isGoogleMapsUrl } from '@/lib/validate'
+import { SwipeNav } from '@/components/SwipeNav'
 
 type Props = { params: Promise<{ slug: string }> }
 
@@ -44,12 +45,19 @@ export default async function ShopPage({ params }: Props) {
   const communityAgg = aggregate(community, criteria)
   const rankIn = (mode: 'admin' | 'community') => buildRanking(shops, allRatings, criteria, mode).find((r) => r.shop.id === shop.id)?.rank
   const adminRank = rankIn('admin')
+  
   const communityRank = rankIn('community')
   const mine = user ? (ratings.find((r) => r.userId === user.id) ?? null) : null
   const price = fmtPrice(shop.doenerPrice)
+    // Reihenfolge wie im Test-Ranking, am Ende springt es wieder nach vorn
+  const order = buildRanking(shops, allRatings, criteria, 'admin').map((r) => r.shop)
+  const at = order.findIndex((s) => s.id === shop.id)
+  const prevShop = order.length > 1 ? order[(at - 1 + order.length) % order.length] : null
+  const nextShop = order.length > 1 ? order[(at + 1) % order.length] : null
 
   return (
-    <>
+   
+    <SwipeNav prev={prevShop?.slug ?? null} next={nextShop?.slug ?? null}>
       <p className="crumbs">
         <Link href="/">← zur Liste</Link>
       </p>
@@ -154,6 +162,6 @@ export default async function ShopPage({ params }: Props) {
           <p className="muted">Noch keiner hat was geschrieben.</p>
         )}
       </section>
-    </>
+    </SwipeNav>
   )
 }

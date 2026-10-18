@@ -3,7 +3,7 @@
 export const SITE = {
   name: 'Kebabranking',
   tagline: 'jeder Döner in der Gegend. selbst gegessen, ehrlich bewertet.',
-  admin: 'Hallahsam',
+  admin: 'Mashalla',
   city: 'Stuttgart',
   /** [lat, lng] – nur Startpunkt, die Karte zoomt danach auf alle Läden */
   mapCenter: [48.7904, 9.1895] as [number, number],
