@@ -34,9 +34,6 @@ export function slugify(s: string): string {
     .slice(0, 60)
 }
 
-/** "Hallahsam" -> "Hallahsams", "Klaus" -> "Klaus’" */
-export const genitive = (name: string) => (/[sßxz]$/i.test(name) ? name + '’' : name + 's')
-
 export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
 export const nameOf = (p: { displayName?: string | null; username?: string } | null | undefined) =>

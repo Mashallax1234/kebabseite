@@ -5,12 +5,14 @@
 --  Kann gefahrlos mehrmals ausgeführt werden.
 --
 --  Wer darf was (Row Level Security):
---    Profile      lesen: alle         ändern: nur das eigene (Rolle nur durch Admins)
+--    Profile      lesen: alle         ändern: nur das eigene (Rolle nur durch Admins), Profilbild im eigenen Ordner
 --    Kriterien    lesen: alle         anlegen/ändern: Admins
 --    Läden        lesen: alle         anlegen/ändern/löschen: Admins
 --    Bewertungen  lesen: alle         anlegen/ändern/löschen: nur die eigene (1 pro Laden)
 --                                     löschen zusätzlich: Admins (Moderation)
 --    Vorschläge   lesen: eigene + Admins   anlegen: eingeloggte Nutzer   bearbeiten: Admins
+--    Fotos        lesen: alle         Titelfoto: Admins   Community-Fotos: jeder eingeloggte Nutzer
+--                                     (max. 5 pro Laden), löschen: eigene + Admins
 -- =====================================================================
 
 create extension if not exists pgcrypto;
@@ -76,7 +78,7 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_user();
 
 -- Rolle ändern dürfen über die API nur Admins. Im SQL-Editor (auth.uid() ist
--- dort leer) geht es immer – so wird Hallahsam zum Admin gemacht, siehe README.
+-- dort leer) geht es immer – so wird der erste Admin gemacht, siehe README.
 create or replace function public.protect_role()
 returns trigger language plpgsql set search_path = public as $$
 begin
@@ -340,3 +342,122 @@ create policy "suggestions_update_admin" on public.suggestions for update
   using (public.is_admin()) with check (public.is_admin());
 create policy "suggestions_delete" on public.suggestions for delete
   using (public.is_admin() or (suggested_by = auth.uid() and status = 'pending'));
+
+
+-- ---------------------------------------------------------------------
+--  Fotos: öffentlicher Storage-Bucket 'shop-images'
+--  Die Fotos werden schon im Browser verkleinert (max. 900 px, JPEG).
+--    <shop_id>/…                         Titelfoto, nur Admins (shops.image_url)
+--    community/<shop_id>/<user_id>/…     Community-Fotos, jeder eingeloggte
+--                                        Nutzer in seinen eigenen Ordner
+--  Lesen: alle (öffentliche URL)
+-- ---------------------------------------------------------------------
+alter table public.shops add column if not exists image_url text check (char_length(image_url) <= 500);
+
+create table if not exists public.shop_photos (
+  id         uuid primary key default gen_random_uuid(),
+  shop_id    uuid not null references public.shops (id) on delete cascade,
+  user_id    uuid not null references public.profiles (id) on delete cascade default auth.uid(),
+  path       text not null unique check (char_length(path) <= 300),
+  created_at timestamptz not null default now()
+);
+create index if not exists shop_photos_shop on public.shop_photos (shop_id, created_at desc);
+
+-- Spam-Schutz: max. 5 Fotos pro Nutzer und Laden, max. 30 pro Tag
+create or replace function public.limit_shop_photos()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if auth.uid() is not null then
+    if (select count(*) from public.shop_photos where user_id = auth.uid() and shop_id = new.shop_id) >= 5 then
+      raise exception 'Maximal 5 Fotos pro Laden. Lösch erst ein altes.';
+    end if;
+    if (select count(*) from public.shop_photos
+        where user_id = auth.uid() and created_at > now() - interval '1 day') >= 30 then
+      raise exception 'Zu viele Fotos heute. Morgen geht wieder was.';
+    end if;
+    new.created_at := now();
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists shop_photos_limit on public.shop_photos;
+create trigger shop_photos_limit before insert on public.shop_photos
+  for each row execute function public.limit_shop_photos();
+
+revoke all on public.shop_photos from anon, authenticated;
+grant select on public.shop_photos to anon, authenticated;
+grant insert, delete on public.shop_photos to authenticated;
+alter table public.shop_photos enable row level security;
+
+drop policy if exists "shop_photos_select" on public.shop_photos;
+drop policy if exists "shop_photos_insert_own" on public.shop_photos;
+drop policy if exists "shop_photos_delete_own_or_admin" on public.shop_photos;
+create policy "shop_photos_select" on public.shop_photos for select using (true);
+-- Nur in den eigenen Ordner, und nur für diesen Laden
+create policy "shop_photos_insert_own" on public.shop_photos for insert
+  with check (user_id = auth.uid() and path like 'community/' || shop_id || '/' || auth.uid() || '/%.jpg');
+create policy "shop_photos_delete_own_or_admin" on public.shop_photos for delete
+  using (user_id = auth.uid() or public.is_admin());
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('shop-images', 'shop-images', true, 2097152, array['image/jpeg'])
+on conflict (id) do update
+  set public = excluded.public, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "shop_images_admin_insert" on storage.objects;
+drop policy if exists "shop_images_admin_update" on storage.objects;
+drop policy if exists "shop_images_admin_delete" on storage.objects;
+drop policy if exists "shop_images_admin_select" on storage.objects;
+drop policy if exists "shop_images_select" on storage.objects;
+drop policy if exists "shop_images_insert" on storage.objects;
+drop policy if exists "shop_images_update" on storage.objects;
+drop policy if exists "shop_images_delete" on storage.objects;
+-- Öffentliche Bucket-URLs brauchen keine Select-Policy; die hier ist fürs Auflisten/Löschen
+create policy "shop_images_select" on storage.objects for select to authenticated
+  using (bucket_id = 'shop-images' and (public.is_admin() or (storage.foldername(name))[3] = auth.uid()::text));
+-- Admins überall; Nutzer nur in den eigenen Community-Ordner und nur, wenn es dazu
+-- schon eine Zeile in shop_photos gibt (dort greifen die Limits)
+create policy "shop_images_insert" on storage.objects for insert to authenticated
+  with check (
+    bucket_id = 'shop-images' and (
+      public.is_admin()
+      or exists (select 1 from public.shop_photos p where p.path = name and p.user_id = auth.uid())
+    )
+  );
+create policy "shop_images_update" on storage.objects for update to authenticated
+  using (bucket_id = 'shop-images' and public.is_admin()) with check (bucket_id = 'shop-images' and public.is_admin());
+create policy "shop_images_delete" on storage.objects for delete to authenticated
+  using (
+    bucket_id = 'shop-images' and (
+      public.is_admin()
+      or ((storage.foldername(name))[1] = 'community' and (storage.foldername(name))[3] = auth.uid()::text)
+    )
+  );
+
+-- ---------------------------------------------------------------------
+--  Profilbilder: öffentlicher Bucket 'avatars', Ordner = eigene user_id
+--  In profiles steht nur der Pfad; der Check sorgt dafür, dass jeder nur
+--  auf Dateien in seinem eigenen Ordner zeigen kann.
+-- ---------------------------------------------------------------------
+alter table public.profiles add column if not exists avatar_path text;
+alter table public.profiles drop constraint if exists profiles_avatar_path_own;
+alter table public.profiles add constraint profiles_avatar_path_own
+  check (avatar_path is null or avatar_path ~ ('^' || id::text || '/[0-9]+\.jpg$'));
+grant update (avatar_path) on public.profiles to authenticated;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('avatars', 'avatars', true, 524288, array['image/jpeg'])
+on conflict (id) do update
+  set public = excluded.public, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "avatars_select_own" on storage.objects;
+drop policy if exists "avatars_insert_own" on storage.objects;
+drop policy if exists "avatars_delete_own" on storage.objects;
+-- Lesen geht über die öffentliche URL; die Select-Policy braucht es fürs Auflisten alter Bilder
+create policy "avatars_select_own" on storage.objects for select to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "avatars_insert_own" on storage.objects for insert to authenticated
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+-- Admins dürfen zur Moderation auch fremde Bilder löschen
+create policy "avatars_delete_own" on storage.objects for delete to authenticated
+  using (bucket_id = 'avatars' and ((storage.foldername(name))[1] = auth.uid()::text or public.is_admin()));

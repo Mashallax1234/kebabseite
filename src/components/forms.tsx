@@ -39,7 +39,7 @@ export function LoginForm({ next, demo }: { next: string; demo: boolean }) {
       </p>
       {demo && (
         <p className="hint">
-          Demo: <code>hallahsam@demo.de</code> / <code>demo</code> ist Admin, <code>kallek@demo.de</code> / <code>demo</code> ist ein
+          Demo: <code>admin@demo.de</code> / <code>demo</code> ist Admin, <code>kallek@demo.de</code> / <code>demo</code> ist ein
           normaler Nutzer.
         </p>
       )}

@@ -9,8 +9,9 @@ import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
+import { AVATAR, SHOP_IMAGE } from '@/lib/config'
 import { backendKind, getBackend, getCurrentUser } from '@/lib/data'
-import type { Scores } from '@/lib/data/types'
+import type { ImageUpload, Scores } from '@/lib/data/types'
 import { UserError } from '@/lib/errors'
 import { rateLimit } from '@/lib/rateLimit'
 import { safeNext } from '@/lib/safeRedirect'
@@ -143,6 +144,24 @@ export async function updateProfileAction(_: ActionResult, fd: FormData): Promis
   return { ok: 'Gespeichert.' }
 }
 
+/** Profilbild: `image` = im Browser zugeschnittenes JPEG, `remove=1` = Bild löschen */
+export async function updateAvatarAction(fd: FormData): Promise<ActionResult> {
+  let removed = false
+  try {
+    const u = await requireUser()
+    rateLimit('photo', u.id)
+    if (!(fd instanceof FormData)) throw new UserError('Kein Bild ausgewählt.')
+    removed = fd.get('remove') === '1'
+    const file = fd.get('image')
+    if (!removed && !(file instanceof Blob)) throw new UserError('Kein Bild ausgewählt.')
+    await (await getBackend()).setMyAvatar(removed ? null : await readJpeg(file as Blob, AVATAR.maxBytes))
+  } catch (e) {
+    return fail(e)
+  }
+  refreshAll()
+  return { ok: removed ? 'Profilbild entfernt.' : 'Neues Profilbild gespeichert.' }
+}
+
 // ---------- Bewertungen ----------
 
 export async function saveRatingAction(shopId: string, scores: Scores, fazit: string): Promise<ActionResult> {
@@ -235,17 +254,66 @@ const shopFormSchema = z.object({
   fazit: textSchema,
 })
 
-export async function saveShopAction(raw: ShopFormInput): Promise<ActionResult> {
+/**
+ * Foto aus dem Formular: `image` = im Browser verkleinertes JPEG, `remove=1` = Foto löschen.
+ * undefined = Foto bleibt, wie es ist. Dem Browser wird nicht geglaubt: Größe und
+ * JPEG-Signatur werden hier nochmal geprüft.
+ */
+async function readShopImage(fd: FormData | null | undefined): Promise<ImageUpload | null | undefined> {
+  if (!(fd instanceof FormData)) return undefined
+  if (fd.get('remove') === '1') return null
+  const file = fd.get('image')
+  return file instanceof Blob ? readJpeg(file) : undefined
+}
+
+async function readJpeg(file: Blob, maxBytes: number = SHOP_IMAGE.maxBytes): Promise<ImageUpload> {
+  if (file.size > maxBytes) throw new UserError('Das Foto ist zu groß.')
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) throw new UserError('Das Foto muss ein JPEG sein.')
+  return { bytes, contentType: 'image/jpeg' }
+}
+
+// ---------- Community-Fotos ----------
+
+export async function addShopPhotoAction(shopId: string, fd: FormData): Promise<ActionResult> {
+  try {
+    const u = await requireUser()
+    rateLimit('photo', u.id)
+    const file = fd instanceof FormData ? fd.get('image') : null
+    if (!(file instanceof Blob)) throw new UserError('Kein Foto ausgewählt.')
+    await (await getBackend()).addMyShopPhoto(idSchema.parse(shopId), await readJpeg(file))
+  } catch (e) {
+    return fail(e)
+  }
+  refreshAll()
+  return { ok: 'Danke! Dein Foto ist drin.' }
+}
+
+export async function deleteShopPhotoAction(photoId: string): Promise<ActionResult> {
+  try {
+    const u = await requireUser()
+    rateLimit('photo', u.id)
+    await (await getBackend()).deleteShopPhoto(idSchema.parse(photoId))
+  } catch (e) {
+    return fail(e)
+  }
+  refreshAll()
+  return {}
+}
+
+export async function saveShopAction(raw: ShopFormInput, imageData?: FormData | null): Promise<ActionResult> {
   let slug = ''
   try {
     await requireAdmin()
     const input = shopFormSchema.parse(raw)
     const backend = await getBackend()
     const shop = shopSchema.parse(input.shop)
+    const image = await readShopImage(imageData)
     const hasRating = Object.keys(input.scores).length > 0
     if (hasRating) validateScores(input.scores, await backend.listCriteria())
 
     const saved = input.id ? await backend.updateShop(input.id, shop) : await backend.createShop(shop)
+    if (image !== undefined) await backend.setShopImage(saved.id, image)
     if (hasRating) await backend.saveMyRating(saved.id, { scores: input.scores, fazit: fazitSchema.parse(input.fazit) })
     if (input.suggestionId) await backend.reviewSuggestion(input.suggestionId, { status: 'approved', adminNote: null, shopId: saved.id })
     slug = saved.slug

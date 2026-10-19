@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useTransition } from 'react'
 import { deleteMyRatingAction, saveRatingAction, type ActionResult } from '@/app/actions'
+import { XP } from '@/lib/config'
 import { fmtDate } from '@/lib/format'
 import { isComplete, pickActive, ratingOverall } from '@/lib/scores'
 import { validateScores } from '@/lib/validate'
@@ -12,12 +13,10 @@ export function RatingForm({
   shopId,
   criteria,
   mine,
-  isAdmin,
 }: {
   shopId: string
   criteria: Criterion[]
   mine: Rating | null
-  isAdmin: boolean
 }) {
   const [scores, setScores] = useState(() => pickActive(mine?.scores, criteria))
   const [fazit, setFazit] = useState(mine?.fazit ?? '')
@@ -52,8 +51,7 @@ export function RatingForm({
 
   return (
     <form className="box rating-form" onSubmit={submit}>
-      <h2>{isAdmin ? 'Dein Urteil' : mine ? 'Deine Bewertung' : 'Selbst bewerten'}</h2>
-      {isAdmin && <p className="hint">Du bist Admin: deine Bewertung zählt fürs Hauptranking, nicht für die Community.</p>}
+      <h2>{mine ? 'Deine Bewertung' : 'Selbst bewerten'}</h2>
       {mine ? (
         <p className="hint">
           Bewertet am {fmtDate(mine.createdAt)}
@@ -61,7 +59,9 @@ export function RatingForm({
           Bewertung jederzeit ändern.
         </p>
       ) : (
-        <p className="hint">Eine Bewertung pro Laden. Später ändern geht jederzeit.</p>
+        <p className="hint">
+          Eine Bewertung pro Laden, später ändern geht jederzeit. Bringt {XP.rating} XP, mit Fazit {XP.rating + XP.fazit} XP.
+        </p>
       )}
 
       <ScoreInputs criteria={criteria} value={scores} onChange={setScores} />

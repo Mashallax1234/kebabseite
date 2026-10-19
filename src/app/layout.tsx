@@ -12,7 +12,7 @@ const plex = IBM_Plex_Mono({ weight: ['400', '600'], subsets: ['latin'], variabl
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.SITE_URL || 'http://localhost:3000'),
   title: { default: SITE.name, template: `%s · ${SITE.name}` },
-  description: `Jeder Dönerladen in ${SITE.city}, getestet und bewertet von ${SITE.admin}. Mit Community-Ranking und Karte.`,
+  description: `Jeder Dönerladen in ${SITE.city}, getestet und bewertet von der Community. Mit Ranking, Rängen und Karte.`,
 }
 
 export const viewport: Viewport = { themeColor: '#f2ecdf' }

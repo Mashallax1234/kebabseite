@@ -15,7 +15,8 @@ function contentSecurityPolicy(nonce: string) {
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? ` 'unsafe-eval'` : ''}`,
     // Inline-Styles braucht React (style={…}) und MapLibre; CSS kann kein JS ausführen
     `style-src 'self' 'unsafe-inline'`,
-    `img-src 'self' data: blob:`,
+    // Ladenfotos liegen im öffentlichen Supabase-Bucket
+    `img-src 'self' data: blob: ${supabase}`.trim(),
     `font-src 'self'`,
     `connect-src 'self' ${MAP_ORIGIN}${dev ? ' ws: wss:' : ''}`,
     `worker-src 'self' blob:`,

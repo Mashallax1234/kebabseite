@@ -18,8 +18,7 @@ export default async function AdminPage() {
     backend.listCriteria(),
     backend.listAllRatings(),
   ])
-  const adminRows = buildRanking(shops, ratings, criteria, 'admin')
-  const community = new Map(buildRanking(shops, ratings, criteria, 'community').map((r) => [r.shop.id, r.agg]))
+  const rows = buildRanking(shops, ratings, criteria)
 
   return (
     <>
@@ -45,31 +44,26 @@ export default async function AdminPage() {
                 <th>#</th>
                 <th>Laden</th>
                 <th>Stadtteil</th>
-                <th className="num">Dein Score</th>
                 <th className="num">Community</th>
+                <th className="num">Stimmen</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {adminRows.map((r) => {
-                const c = community.get(r.shop.id)
-                return (
-                  <tr key={r.shop.id}>
-                    <td>{r.rank ?? '–'}</td>
-                    <td>
-                      <Link href={`/laden/${r.shop.slug}`}>{r.shop.name}</Link>
-                    </td>
-                    <td>{r.shop.district}</td>
-                    <td className="num">{fmtScore(r.agg.overall)}</td>
-                    <td className="num">
-                      {fmtScore(c?.overall)} <span className="muted small">({c?.count ?? 0})</span>
-                    </td>
-                    <td>
-                      <Link href={`/admin/laden/${r.shop.id}`}>bearbeiten</Link>
-                    </td>
-                  </tr>
-                )
-              })}
+              {rows.map((r) => (
+                <tr key={r.shop.id}>
+                  <td>{r.rank ?? '–'}</td>
+                  <td>
+                    <Link href={`/laden/${r.shop.slug}`}>{r.shop.name}</Link>
+                  </td>
+                  <td>{r.shop.district}</td>
+                  <td className="num">{fmtScore(r.agg.overall)}</td>
+                  <td className="num">{r.agg.count}</td>
+                  <td>
+                    <Link href={`/admin/laden/${r.shop.id}`}>bearbeiten</Link>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

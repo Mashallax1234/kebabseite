@@ -16,8 +16,8 @@ export default async function Image({ params }: { params: Promise<{ slug: string
   const [criteria, ratings, all, shops] = shop
     ? await Promise.all([backend.listCriteria(), backend.listRatingsForShop(shop.id), backend.listAllRatings(), backend.listShops()])
     : [[], [], [], []]
-  const admin = aggregate(ratings.filter((r) => r.author?.role === 'admin'), criteria)
-  const rank = shop ? buildRanking(shops, all, criteria, 'admin').find((r) => r.shop.id === shop.id)?.rank : null
+  const agg = aggregate(ratings, criteria)
+  const rank = shop ? buildRanking(shops, all, criteria).find((r) => r.shop.id === shop.id)?.rank : null
 
   return new ImageResponse(
     (
@@ -41,11 +41,11 @@ export default async function Image({ params }: { params: Promise<{ slug: string
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 30 }}>
           <div style={{ fontSize: 120, fontWeight: 800, background: '#a8cf8c', border: '6px solid #221f1a', padding: '0 30px' }}>
-            {fmtScore(admin.overall)}
+            {fmtScore(agg.overall)}
           </div>
           {rank && (
             <div style={{ fontSize: 48, background: '#f4d24a', border: '5px solid #221f1a', padding: '6px 20px', transform: 'rotate(-2deg)' }}>
-              PLATZ {rank} BEI {SITE.admin.toUpperCase()}
+              PLATZ {rank} IN DER COMMUNITY
             </div>
           )}
         </div>

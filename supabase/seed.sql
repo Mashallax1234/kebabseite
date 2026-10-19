@@ -1,9 +1,9 @@
 -- =====================================================================
---  Platzhalter-Läden + Hallahsams Bewertungen (dieselben wie im Demo-Modus).
+--  Platzhalter-Läden + Start-Bewertungen (dieselben wie im Demo-Modus).
 --  Alle Namen und Adressen sind ausgedacht.
 --
---  Reihenfolge: schema.sql -> Hallahsam registriert sich auf der Seite ->
---  Hallahsam zum Admin machen (README) -> diese Datei ausführen.
+--  Reihenfolge: schema.sql -> jemand registriert sich auf der Seite ->
+--  zum Admin machen (README) -> diese Datei ausführen.
 --  Später einfach über die Admin-Seite ersetzen oder löschen.
 -- =====================================================================
 
@@ -22,7 +22,8 @@ insert into public.shops (slug, name, address, district, lat, lng, maps_url, doe
   ('doener-ecke-bahnhof', 'Döner Ecke am Bahnhof', 'Bahnhofsplatz 1, 10317 Berlin',     'Lichtenberg',     52.5105, 13.4975, 'https://www.google.com/maps/search/?api=1&query=52.5105,13.4975', 5.00)
 on conflict (slug) do nothing;
 
--- Hallahsams Bewertungen (werden nur angelegt, wenn es das Profil "Hallahsam" schon gibt)
+-- Start-Bewertungen des ersten Admins (werden nur angelegt, wenn es schon einen Admin gibt).
+-- Sie zählen wie jede andere Community-Bewertung.
 insert into public.ratings (shop_id, user_id, scores, fazit, created_at)
 select s.id, p.id, v.scores::jsonb, v.fazit, v.tested::timestamptz
 from (values
@@ -40,5 +41,5 @@ from (values
   ('doener-ecke-bahnhof', '{"preis": 9,   "auswahl": 3,   "sosse": 4,   "fleisch": 4.5}', 'Hat mich nicht überzeugt. Fleisch trocken, Salat welk. Aber hey: 5 Euro.', '2026-03-22')
 ) as v(slug, scores, fazit, tested)
 join public.shops s on s.slug = v.slug
-join public.profiles p on lower(p.username) = 'hallahsam'
+join (select id from public.profiles where role = 'admin' order by created_at limit 1) p on true
 on conflict (shop_id, user_id) do nothing;

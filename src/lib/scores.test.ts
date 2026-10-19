@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { aggregate, buildRanking, ratingOverall } from './scores'
+import { rankFor, ranksByUser, xpFor } from './levels'
+import { XP } from './config'
 import { coordsFromMapsUrl, shopSchema, validateScores } from './validate'
 import { slugify } from './format'
 import type { Criterion, RatingLite, Shop } from './data/types'
@@ -8,10 +10,10 @@ const crit = (key: string, active = true, sortOrder = 0): Criterion => ({ key, l
 const criteria = [crit('preis', true, 1), crit('auswahl', true, 2), crit('sosse', true, 3), crit('fleisch', true, 4)]
 const shop = (id: string, name = id): Shop => ({
   id, slug: id, name, address: 'x', district: null, lat: 0, lng: 0, mapsUrl: 'https://maps.app.goo.gl/x',
-  doenerPrice: null, notes: null, createdAt: '', updatedAt: '',
+  doenerPrice: null, notes: null, imageUrl: null, createdAt: '', updatedAt: '',
 })
-const r = (shopId: string, scores: number[], authorRole: 'admin' | 'user' = 'user'): RatingLite => ({
-  shopId, authorRole, scores: { preis: scores[0], auswahl: scores[1], sosse: scores[2], fleisch: scores[3] },
+const r = (shopId: string, scores: number[], userId = 'user', hasFazit = false): RatingLite => ({
+  shopId, userId, hasFazit, scores: { preis: scores[0], auswahl: scores[1], sosse: scores[2], fleisch: scores[3] },
 })
 
 describe('Gesamtnote', () => {
@@ -37,20 +39,49 @@ describe('Gesamtnote', () => {
 describe('Ranking', () => {
   const shops = [shop('a', 'Anadolu'), shop('b', 'Bosporus'), shop('c', 'Cem'), shop('d', 'Döner Ecke')]
   const ratings = [
-    r('a', [8, 8, 8, 8], 'admin'),
-    r('b', [9, 9, 9, 9], 'admin'),
-    r('c', [8, 8, 8, 8], 'admin'),
+    r('a', [8, 8, 8, 8], 'chef'),
     r('a', [2, 2, 2, 2]),
+    r('b', [9, 9, 9, 9], 'chef'),
     r('b', [5, 5, 5, 5]),
+    r('c', [7, 7, 7, 7]),
   ]
 
-  it('Admin-Ranking zählt nur Admin-Bewertungen, gleiche Note = gleicher Platz', () => {
-    const rows = buildRanking(shops, ratings, criteria, 'admin')
-    expect(rows.map((x) => [x.shop.id, x.rank])).toEqual([['b', 1], ['a', 2], ['c', 2], ['d', null]])
+  it('zählt jede Bewertung gleich, gleiche Note = gleicher Platz, mehr Stimmen zuerst', () => {
+    const rows = buildRanking(shops, ratings, criteria)
+    expect(rows.map((x) => [x.shop.id, x.rank])).toEqual([['b', 1], ['c', 1], ['a', 3], ['d', null]])
+    expect(rows[0].agg.count).toBe(2)
   })
-  it('Community-Ranking ignoriert Admin-Bewertungen', () => {
-    const rows = buildRanking(shops, ratings, criteria, 'community')
-    expect(rows.map((x) => [x.shop.id, x.rank])).toEqual([['b', 1], ['a', 2], ['c', null], ['d', null]])
+})
+
+describe('Ränge', () => {
+  const many = (n: number, hasFazit: boolean) => Array.from({ length: n }, () => ({ hasFazit }))
+
+  it('gibt XP für Bewertungen und Fazits', () => {
+    expect(xpFor([])).toBe(0)
+    expect(xpFor([{ hasFazit: false }, { hasFazit: true }])).toBe(XP.rating * 2 + XP.fazit)
+  })
+  it('ordnet XP den Stufen zu', () => {
+    expect([0, 5, 6, 20, 21, 50, 51, 100, 101, 999].map((xp) => rankFor(xp).level.name)).toEqual([
+      'Karlsruher', 'Karlsruher', 'Gelegenheitsdöner', 'Gelegenheitsdöner', 'Macher', 'Macher', 'Experte', 'Experte', 'Jumbo', 'Jumbo',
+    ])
+  })
+  it('zeigt den Fortschritt bis zur nächsten Stufe', () => {
+    const rank = rankFor(xpFor(many(3, false)))
+    expect(rank).toMatchObject({ xp: 9, next: { name: 'Macher' } })
+    expect(rank.progress).toBeCloseTo((9 - 6) / (21 - 6))
+    expect(rankFor(500)).toMatchObject({ next: null, progress: 1 })
+  })
+  it('rechnet Ränge pro Nutzer', () => {
+    const s = [5, 5, 5, 5]
+    const ranks = ranksByUser([r('a', s, 'chef'), r('b', s, 'chef'), r('c', s, 'chef', true), r('a', s), r('b', s), r('c', s)])
+    expect(ranks.get('chef')?.xp).toBe(3 * XP.rating + XP.fazit)
+    expect(ranks.get('user')?.level.name).toBe('Gelegenheitsdöner')
+  })
+  it('gibt XP für Fotos', () => {
+    expect(xpFor([{ hasFazit: false }], 2)).toBe(XP.rating + 2 * XP.photo)
+    const ranks = ranksByUser([r('a', [5, 5, 5, 5], 'mo')], [{ userId: 'mo' }, { userId: 'mo' }, { userId: 'fotograf' }])
+    expect(ranks.get('mo')?.xp).toBe(XP.rating + 2 * XP.photo)
+    expect(ranks.get('fotograf')?.xp).toBe(XP.photo)
   })
 })
 

@@ -1,6 +1,6 @@
-# Hallahsams Dönerliste
+# Kebabranking
 
-Ranking aller Dönerläden in der Gegend: Hallahsams eigenes Ranking, ein Community-Ranking aus den Nutzerbewertungen, eine Seite pro Laden mit Google-Maps-Navigation und eine Karte im GTA-Pausenmenü-Stil.
+Ranking aller Dönerläden in der Gegend, komplett aus Community-Bewertungen: eine Seite pro Laden mit Foto und Google-Maps-Navigation, Ränge mit XP für alle, die mitbewerten, und eine Karte im GTA-Pausenmenü-Stil mit „15 Min. zu Fuß“-Filter.
 
 **Stack:** Next.js 16 (App Router, React 19, TypeScript) · Server Actions · Supabase (`@supabase/ssr`) · zod · MapLibre GL + OpenFreeMap · Vitest
 
@@ -15,10 +15,10 @@ npm run dev
 
 | Login | Passwort | Rolle |
 |---|---|---|
-| `hallahsam@demo.de` | `demo` | Admin |
+| `admin@demo.de` | `demo` | Admin |
 | `kallek@demo.de` | `demo` | normaler Nutzer |
 
-Im Fußbereich gibt es „Demo zurücksetzen“.
+Im Fußbereich gibt es „Demo zurücksetzen“ (nach einem Update nötig, wenn die `demo.json` noch alte Daten hat).
 
 ```bash
 npm test            # Ranking-/Noten-Logik und Validierung
@@ -28,14 +28,16 @@ npm run build
 
 ## Was die Seite kann
 
-- **Ranking** (`/`): Tabelle wie in Excel, sortierbar, mit Suche. Umschalten zwischen *Hallahsams Ranking* (nur Admin-Bewertungen) und *Community-Ranking* (`/?ansicht=community`, alle anderen Nutzer).
-- **Gesamtnote** = Durchschnitt aller aktiven Kriterien (1–10, halbe Punkte erlaubt). Gleiche Note = gleicher Platz.
-- **Ladenseite** (`/laden/<slug>`): Hallahsams Urteil, Community-Schnitt, kleine Karte, Button „In Google Maps navigieren“ (hinterlegter Maps-Link), eigene Bewertung mit Fazit, Liste aller Fazits. Beim Teilen (z. B. in WhatsApp) erscheint ein Vorschaubild mit Note und Platz.
+- **Ranking** (`/`): Tabelle wie in Excel, sortierbar, mit Suche. Jede Bewertung zählt gleich – auch die von Admins. Es gibt nur noch das Community-Ranking.
+- **Gesamtnote** = Durchschnitt aller aktiven Kriterien (1–10, halbe Punkte erlaubt), gemittelt über alle Bewertungen. Gleiche Note = gleicher Platz, bei Gleichstand stehen Läden mit mehr Stimmen oben.
+- **Ladenseite** (`/laden/<slug>`): Foto, Community-Schnitt, kleine Karte, Button „In Google Maps navigieren“ (hinterlegter Maps-Link), eigene Bewertung mit Fazit, Liste aller Fazits mit dem Rang der Verfasser. Beim Teilen (z. B. in WhatsApp) erscheint ein Vorschaubild mit Note und Platz.
 - **Bewerten**: nur mit Konto, eine Bewertung pro Nutzer und Laden, jederzeit änderbar oder löschbar.
-- **Karte** (`/karte`): Blips nach Note eingefärbt, Legende, Info-Karte, „Meine Position“ mit Wegpunkt-Linie. Tasten: `←/→` Laden wechseln, `Enter` Details, `G` Navigation, `P` Position, `+/-` Zoom, `L` Legende, `Esc` zurück.
+- **Fotos**: Jeder eingeloggte Nutzer kann auf der Ladenseite Fotos hochladen (bis zu 5 pro Laden). Sie werden im Browser auf max. 900 px / JPEG 70 % verkleinert und landen im Supabase-Bucket `shop-images`. Eigene Fotos kann man löschen, Admins alle. Ohne Titelfoto vom Admin zeigt die Ladenseite das neueste Community-Foto.
+- **Karte** (`/karte`): Blips nach Note eingefärbt, Legende, Info-Karte, „Meine Position“ mit Wegpunkt-Linie, „In meiner Nähe · 15 Min“ (Standort per Browser, zeigt Karte und Liste nur für Läden im Umkreis von 1,2 km). Tasten: `←/→` Laden wechseln, `Enter` Details, `G` Navigation, `P` Position, `N` 15-Min.-Radius, `+/-` Zoom, `L` Legende, `Esc` zurück.
 - **Vorschlagen** (`/vorschlagen`): Nutzer schlagen Läden vor und sehen den Status (offen / angenommen / abgelehnt mit Begründung).
-- **Profile** (`/u/<name>`, `/profil`): Anzeigename, Bio und alle Bewertungen.
-- **Admin** (`/admin`): Vorschläge annehmen (öffnet den Editor vorausgefüllt, Koordinaten werden aus dem Maps-Link gelesen) oder ablehnen, Läden anlegen, bearbeiten und löschen, Fazits moderieren, **Kriterien verwalten**.
+- **Profile** (`/u/<name>`, `/profil`): Profilbild (im Browser quadratisch zugeschnitten, 320 px, Bucket `avatars`; ohne Bild Initialen), Anzeigename, Bio, Rang mit XP-Balken und alle Bewertungen. Das Profilbild erscheint auch bei Fazits und Fotos.
+- **Ränge**: Jede Bewertung bringt 3 XP, mit Fazit 5 XP, jedes Foto 2 XP (gelöschte Bewertungen und Fotos zählen nicht mehr). Stufen: Karlsruher (0–5), Gelegenheitsdöner (6–20), Macher (21–50), Experte (51–100), Jumbo (ab 101). Werte und Namen stehen in `src/lib/config.ts` (`XP`, `LEVELS`).
+- **Admin** (`/admin`): Vorschläge annehmen (öffnet den Editor vorausgefüllt, Koordinaten werden aus dem Maps-Link gelesen) oder ablehnen, Läden anlegen, bearbeiten und löschen, Titelfoto setzen, Fotos moderieren, Fazits moderieren, **Kriterien verwalten**.
 
 ### Neues Kriterium
 
@@ -44,7 +46,7 @@ Admin → Kriterien → unterste Zeile ausfüllen → „Anlegen“. Es taucht s
 ## Supabase anschließen
 
 1. Projekt auf <https://supabase.com> anlegen.
-2. **SQL Editor** → Inhalt von `supabase/schema.sql` einfügen → *Run*.
+2. **SQL Editor** → Inhalt von `supabase/schema.sql` einfügen → *Run*. Legt auch den öffentlichen Storage-Bucket `shop-images` für Ladenfotos an (nur Admins dürfen hochladen).
 3. `.env.example` nach `.env.local` kopieren und ausfüllen:
    ```
    SUPABASE_URL=https://DEIN-PROJEKT.supabase.co
@@ -52,12 +54,12 @@ Admin → Kriterien → unterste Zeile ausfüllen → „Anlegen“. Es taucht s
    SITE_URL=https://deine-domain.de
    ```
 4. **Authentication → URL Configuration**: *Site URL* auf die echte Adresse setzen und `https://deine-domain.de/auth/callback` als Redirect-URL eintragen.
-5. Hallahsam registriert sich ganz normal auf der Seite, mit Nutzername `Hallahsam`.
+5. Der künftige Admin registriert sich ganz normal auf der Seite, z. B. mit Nutzername `admin`.
 6. Im SQL Editor zum Admin machen:
    ```sql
-   update public.profiles set role = 'admin' where lower(username) = 'hallahsam';
+   update public.profiles set role = 'admin' where lower(username) = 'admin';
    ```
-7. Optional: `supabase/seed.sql` ausführen, dann sind die Platzhalter-Läden mit Hallahsams Bewertungen drin.
+7. Optional: `supabase/seed.sql` ausführen, dann sind die Platzhalter-Läden mit ein paar Start-Bewertungen des Admins drin.
 
 ### Google-Login einrichten
 
@@ -69,11 +71,11 @@ Admin → Kriterien → unterste Zeile ausfüllen → „Anlegen“. Es taucht s
 
 Wer sich zum ersten Mal per Google anmeldet, bekommt automatisch ein Profil. Der Nutzername wird aus dem Google-Namen gebildet (z. B. „Max Müller“ → `max_muller`, bei Doppelungen `max_muller2`), der Anzeigename ist der volle Name. Im Demo-Modus loggt der Google-Button einen Beispielnutzer „Gina Google“ ein.
 
-Hat sich Hallahsam per Google angemeldet, geht das Admin-Machen im SQL Editor über die E-Mail-Adresse:
+Hat sich der Admin per Google angemeldet, geht das Admin-Machen im SQL Editor über die E-Mail-Adresse:
 
 ```sql
 update public.profiles set role = 'admin'
-where id = (select id from auth.users where email = 'hallahsams.adresse@gmail.com');
+where id = (select id from auth.users where email = 'admin.adresse@gmail.com');
 ```
 
 Die Rechte werden in der Datenbank per Row Level Security durchgesetzt. Die Server Actions prüfen zusätzlich. Ein normaler Nutzer kann also auch mit Tricks keine Läden anlegen oder fremde Bewertungen ändern.
@@ -151,4 +153,4 @@ supabase/             schema.sql, seed.sql
 scripts/              kopiert den MapLibre-Worker nach public/ (läuft automatisch)
 ```
 
-Texte wie Seitenname, Stadt und Admin-Name stehen in `src/lib/config.ts`.
+Texte wie Seitenname und Stadt, die Ränge, der 15-Min.-Radius und die Fotogröße stehen in `src/lib/config.ts`.

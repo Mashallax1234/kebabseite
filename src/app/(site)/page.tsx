@@ -3,11 +3,10 @@ import { RankingTable } from '@/components/RankingTable'
 import { Score } from '@/components/ui'
 import { getBackend, getCurrentUser } from '@/lib/data'
 import { activeCriteria, buildRanking } from '@/lib/scores'
-import { genitive, plural } from '@/lib/format'
-import { SCORE, SITE } from '@/lib/config'
+import { plural } from '@/lib/format'
+import { LEVELS, SCORE, XP } from '@/lib/config'
 
-export default async function RankingPage({ searchParams }: { searchParams: Promise<{ ansicht?: string }> }) {
-  const mode = (await searchParams).ansicht === 'community' ? 'community' : 'admin'
+export default async function RankingPage() {
   const backend = await getBackend()
   const [shops, criteria, ratings, user] = await Promise.all([
     backend.listShops(),
@@ -16,28 +15,20 @@ export default async function RankingPage({ searchParams }: { searchParams: Prom
     getCurrentUser(),
   ])
   const crit = activeCriteria(criteria)
-  const rows = buildRanking(shops, ratings, criteria, mode)
+  const rows = buildRanking(shops, ratings, criteria)
   const leader = rows.find((r) => r.rank === 1)
-  const communityVotes = ratings.filter((r) => r.authorRole !== 'admin').length
 
   return (
     <>
       <section className="intro">
         <div>
-          {mode === 'admin' ? (
-            <p className="lead">
-              Hier steht jeder Dönerladen aus der Gegend, den {SITE.admin} durchprobiert hat. Bewertet wird nach{' '}
-              {crit.map((c) => c.label).join(', ')}, jeweils {SCORE.min} bis {SCORE.max}. Der Schnitt daraus ist die Gesamtnote.
-            </p>
-          ) : (
-            <p className="lead">
-              Das Ranking aus euren Bewertungen. Jeder mit Konto kann pro Laden einmal abstimmen und die Bewertung später
-              ändern. {genitive(SITE.admin)} eigene Wertung zählt hier nicht mit.
-            </p>
-          )}
+          <p className="lead">
+            Das Ranking aus euren Bewertungen. Jeder mit Konto kann pro Laden einmal abstimmen und die Bewertung später ändern.
+            Bewertet wird nach {crit.map((c) => c.label).join(', ')}, jeweils {SCORE.min} bis {SCORE.max}. Der Schnitt aus allen
+            Bewertungen ist die Gesamtnote.
+          </p>
           <p className="muted small">
-            {plural(shops.length, 'Laden', 'Läden')} auf der Liste ·{' '}
-            {plural(communityVotes, 'Community-Bewertung', 'Community-Bewertungen')}
+            {plural(shops.length, 'Laden', 'Läden')} auf der Liste · {plural(ratings.length, 'Bewertung', 'Bewertungen')}
           </p>
         </div>
         {leader && (
@@ -50,13 +41,7 @@ export default async function RankingPage({ searchParams }: { searchParams: Prom
         )}
       </section>
 
-      <RankingTable
-        key={mode}
-        mode={mode}
-        rows={rows}
-        criteria={crit}
-        tabs={{ admin: `${genitive(SITE.admin)} Ranking`, community: 'Community-Ranking' }}
-      />
+      <RankingTable rows={rows} criteria={crit} />
 
       <section className="how">
         <h2>So wird bewertet</h2>
@@ -69,7 +54,7 @@ export default async function RankingPage({ searchParams }: { searchParams: Prom
           ))}
           <div>
             <dt>Gesamt</dt>
-            <dd>Durchschnitt aller Kriterien. Keine Gewichtung, kein Hokuspokus.</dd>
+            <dd>Durchschnitt aller Kriterien, gemittelt über alle Bewertungen. Keine Gewichtung, kein Hokuspokus.</dd>
           </div>
         </dl>
         <p className="legend">
@@ -79,6 +64,22 @@ export default async function RankingPage({ searchParams }: { searchParams: Prom
           <span className="score tier-meh">5+</span>
           <span className="score tier-bad">darunter</span>
         </p>
+        <h2>Ränge</h2>
+        <p>
+          Jede Bewertung bringt {XP.rating} XP, mit geschriebenem Fazit {XP.rating + XP.fazit} XP, jedes Foto {XP.photo} XP. Je mehr
+          XP, desto höher der Rang:
+        </p>
+        <ol className="levels">
+          {LEVELS.map((l, i) => {
+            const next = LEVELS[i + 1]
+            return (
+              <li key={l.level}>
+                <span className={`level-tag level-${l.level}`}>{l.name}</span>
+                <span className="muted small">{next ? `${l.min}–${next.min - 1} XP` : `ab ${l.min} XP`}</span>
+              </li>
+            )
+          })}
+        </ol>
         {!user && (
           <p>
             Anderer Meinung? <Link href="/registrieren">Konto anlegen</Link> und selbst bewerten.

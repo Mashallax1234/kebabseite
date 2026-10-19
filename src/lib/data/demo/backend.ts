@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { cookies } from 'next/headers'
+import { PHOTOS_PER_USER_AND_SHOP } from '../../config'
 import { seedData, type DemoDb, type DemoSuggestion } from './seed'
 import { BackendError, type Backend, type Profile, type Rating, type Suggestion } from '../types'
 
@@ -26,6 +27,10 @@ function db(): DemoDb {
       persist()
     }
   }
+  // Ältere Stände (Datei oder noch im Speicher nach einem Update) kennen noch keine Fotos
+  g.__demoDb.shops.forEach((s) => (s.imageUrl ??= null))
+  g.__demoDb.photos ??= []
+  g.__demoDb.profiles.forEach((p) => (p.avatarUrl ??= null))
   return g.__demoDb
 }
 
@@ -49,7 +54,7 @@ export async function demoGoogleLogin() {
   const id = 'user-google-demo'
   if (!d.profiles.some((p) => p.id === id)) {
     d.users.push({ id, email: 'gina.google@gmail.com', password: randomUUID() })
-    d.profiles.push({ id, username: 'gina.google', displayName: 'Gina Google', bio: null, role: 'user', createdAt: now() })
+    d.profiles.push({ id, username: 'gina.google', displayName: 'Gina Google', bio: null, role: 'user', avatarUrl: null, createdAt: now() })
     persist()
   }
   ;(await cookies()).set(COOKIE, id, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30 })
@@ -73,7 +78,7 @@ export function createDemoBackend(): Backend {
   const profile = (id: string) => db().profiles.find((p) => p.id === id) ?? null
   const author = (id: string) => {
     const p = profile(id)
-    return p ? { username: p.username, displayName: p.displayName, role: p.role } : null
+    return p ? { username: p.username, displayName: p.displayName, role: p.role, avatarUrl: p.avatarUrl } : null
   }
   const withSuggester = (s: DemoSuggestion): Suggestion => {
     const p = profile(s.suggestedBy)
@@ -101,7 +106,7 @@ export function createDemoBackend(): Backend {
       if (d.profiles.some((p) => sameName(p.username, username))) throw new BackendError('Der Nutzername ist schon vergeben.')
       const id = randomUUID()
       d.users.push({ id, email, password })
-      d.profiles.push({ id, username, displayName: username, bio: null, role: 'user', createdAt: now() })
+      d.profiles.push({ id, username, displayName: username, bio: null, role: 'user', avatarUrl: null, createdAt: now() })
       persist()
       await setSession(id)
       return { needsConfirmation: false }
@@ -132,6 +137,11 @@ export function createDemoBackend(): Backend {
       Object.assign(profile(u.id)!, { displayName, bio })
       persist()
     },
+    async setMyAvatar(image) {
+      const u = await needUser()
+      profile(u.id)!.avatarUrl = image ? `data:${image.contentType};base64,${Buffer.from(image.bytes).toString('base64')}` : null
+      persist()
+    },
     isUsernameTaken: async (username) => db().profiles.some((p) => sameName(p.username, username)),
 
     // ---------- Kriterien ----------
@@ -152,7 +162,7 @@ export function createDemoBackend(): Backend {
     async createShop(input) {
       await needAdmin()
       if (db().shops.some((s) => s.slug === input.slug)) throw new BackendError('Diese URL gibt es schon.')
-      const shop = { id: randomUUID(), ...input, createdAt: now(), updatedAt: now() }
+      const shop = { id: randomUUID(), ...input, imageUrl: null, createdAt: now(), updatedAt: now() }
       db().shops.push(shop)
       persist()
       return clone(shop)
@@ -171,15 +181,57 @@ export function createDemoBackend(): Backend {
       const d = db()
       d.shops = d.shops.filter((s) => s.id !== id)
       d.ratings = d.ratings.filter((r) => r.shopId !== id)
+      d.photos = d.photos.filter((p) => p.shopId !== id)
       d.suggestions.forEach((s) => {
         if (s.shopId === id) s.shopId = null
       })
       persist()
     },
+    // Kein Speicher-Bucket im Demo-Modus: das (kleine) JPEG landet als data:-URL direkt in demo.json
+    async setShopImage(shopId, image) {
+      await needAdmin()
+      const shop = db().shops.find((s) => s.id === shopId)
+      if (!shop) throw new BackendError('Laden nicht gefunden.')
+      shop.imageUrl = image ? `data:${image.contentType};base64,${Buffer.from(image.bytes).toString('base64')}` : null
+      persist()
+      return shop.imageUrl
+    },
+
+    // ---------- Community-Fotos ----------
+    listPhotosForShop: async (shopId) =>
+      clone(
+        db()
+          .photos.filter((p) => p.shopId === shopId)
+          .map((p) => {
+            const a = author(p.userId)
+            return { ...p, author: a ? { username: a.username, displayName: a.displayName, avatarUrl: a.avatarUrl } : null }
+          })
+          .sort(byNewest),
+      ),
+    listAllPhotos: async () => db().photos.map((p) => ({ shopId: p.shopId, userId: p.userId })),
+    async addMyShopPhoto(shopId, image) {
+      const u = await needUser()
+      const d = db()
+      if (!d.shops.some((s) => s.id === shopId)) throw new BackendError('Laden nicht gefunden.')
+      if (d.photos.filter((p) => p.shopId === shopId && p.userId === u.id).length >= PHOTOS_PER_USER_AND_SHOP) {
+        throw new BackendError(`Maximal ${PHOTOS_PER_USER_AND_SHOP} Fotos pro Laden. Lösch erst ein altes.`)
+      }
+      const url = `data:${image.contentType};base64,${Buffer.from(image.bytes).toString('base64')}`
+      d.photos.push({ id: randomUUID(), shopId, userId: u.id, url, createdAt: now() })
+      persist()
+    },
+    async deleteShopPhoto(photoId) {
+      const u = await needUser()
+      const d = db()
+      const photo = d.photos.find((p) => p.id === photoId)
+      if (!photo || (photo.userId !== u.id && u.role !== 'admin')) throw new BackendError('Foto nicht gefunden oder nicht deins.')
+      d.photos = d.photos.filter((p) => p.id !== photoId)
+      persist()
+    },
 
     // ---------- Bewertungen ----------
     listAllRatings: async () =>
-      db().ratings.map((r) => ({ shopId: r.shopId, scores: { ...r.scores }, authorRole: author(r.userId)?.role ?? 'user' })),
+      db().ratings.map((r) => ({ shopId: r.shopId, userId: r.userId, scores: { ...r.scores }, hasFazit: !!r.fazit?.trim() })),
     listRatingsForShop: async (shopId) =>
       clone(db().ratings.filter((r) => r.shopId === shopId).map((r): Rating => ({ ...r, author: author(r.userId) })).sort(byNewest)),
     listRatingsByUser: async (userId) =>

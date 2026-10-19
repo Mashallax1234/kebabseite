@@ -3,7 +3,6 @@ import { SuggestForm } from '@/components/forms'
 import { NeedLogin, StatusTag } from '@/components/ui'
 import { getBackend, getCurrentUser } from '@/lib/data'
 import { fmtDate } from '@/lib/format'
-import { SITE } from '@/lib/config'
 
 export const metadata: Metadata = { title: 'Laden vorschlagen' }
 
@@ -15,7 +14,7 @@ export default async function SuggestPage() {
     <>
       <h1>Laden vorschlagen</h1>
       <p className="lead">
-        Da fehlt einer? Schick ihn rein. {SITE.admin} schaut sich das an, geht hin, isst, und trägt ihn ein. Oder eben nicht.
+        Da fehlt einer? Schick ihn rein. Ein Admin schaut sich das an und trägt ihn ein, dann kann die Community loslegen. Oder eben nicht.
       </p>
 
       {!user ? (

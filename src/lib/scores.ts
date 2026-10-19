@@ -4,8 +4,6 @@ import type { Criterion, RatingLite, Scores, Shop } from './data/types'
 
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length
 
-export type Mode = 'admin' | 'community'
-
 export interface Aggregate {
   overall: number | null
   perCriterion: Record<string, number | null>
@@ -43,17 +41,13 @@ export function aggregate(ratings: { scores: Scores }[], criteria: Criterion[]):
   return { overall: overalls.length ? mean(overalls) : null, perCriterion, count: overalls.length }
 }
 
-const matchesMode = (mode: Mode) => (r: { authorRole: string }) =>
-  mode === 'admin' ? r.authorRole === 'admin' : r.authorRole !== 'admin'
-
 /**
- * mode 'admin'     -> nur Bewertungen von Admins (Hallahsams Ranking)
- * mode 'community' -> alle anderen Nutzer
+ * Community-Ranking: jede Bewertung zählt gleich, egal von wem.
  * Gleiche Note = gleicher Platz (1, 2, 2, 4 …). Läden ohne Wertung stehen unten, ohne Platz.
  */
-export function buildRanking(shops: Shop[], ratings: RatingLite[], criteria: Criterion[], mode: Mode): RankedRow[] {
-  const byShop = new Map<string, RatingLite[]>(shops.map((s) => [s.id, []]))
-  ratings.filter(matchesMode(mode)).forEach((r) => byShop.get(r.shopId)?.push(r))
+export function buildRanking(shops: Shop[], ratings: Pick<RatingLite, 'shopId' | 'scores'>[], criteria: Criterion[]): RankedRow[] {
+  const byShop = new Map<string, { scores: Scores }[]>(shops.map((s) => [s.id, []]))
+  ratings.forEach((r) => byShop.get(r.shopId)?.push(r))
 
   const rows: RankedRow[] = shops.map((shop) => ({ shop, agg: aggregate(byShop.get(shop.id) ?? [], criteria), rank: null }))
   rows.sort((a, b) => {

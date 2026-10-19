@@ -15,6 +15,7 @@ export const LIMITS = {
   rating: { max: 30, windowMs: 10 * 60_000 }, // pro Nutzer
   suggestion: { max: 5, windowMs: 24 * 60 * 60_000 }, // pro Nutzer
   profile: { max: 20, windowMs: 10 * 60_000 }, // pro Nutzer
+  photo: { max: 20, windowMs: 60 * 60_000 }, // pro Nutzer (Hochladen und Löschen)
 } as const
 
 export function rateLimit(kind: keyof typeof LIMITS, key: string) {

@@ -1,7 +1,9 @@
 'use client'
 import Link from 'next/link'
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { deleteShopAction, saveShopAction } from '@/app/actions'
+import { compressImage } from '@/lib/compressImage'
+import { SHOP_IMAGE } from '@/lib/config'
 import { nameOf, slugify } from '@/lib/format'
 import { isComplete, pickActive, ratingOverall } from '@/lib/scores'
 import { coordsFromMapsUrl, firstIssue, shopSchema, validateScores } from '@/lib/validate'
@@ -47,6 +49,33 @@ export function ShopEditor({
   const [hint, setHint] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
+  // Neues Foto (schon verkleinert) oder „altes Foto löschen“
+  const [photo, setPhoto] = useState<{ blob: Blob; preview: string } | null>(null)
+  const [removePhoto, setRemovePhoto] = useState(false)
+  const [compressing, setCompressing] = useState(false)
+
+  // Vorschau-URL wieder freigeben, wenn sie nicht mehr gebraucht wird
+  useEffect(() => () => {
+    if (photo) URL.revokeObjectURL(photo.preview)
+  }, [photo])
+
+  async function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // dieselbe Datei nochmal wählen können
+    if (!file) return
+    setError(null)
+    setCompressing(true)
+    try {
+      const blob = await compressImage(file)
+      setPhoto({ blob, preview: URL.createObjectURL(blob) })
+      setRemovePhoto(false)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setCompressing(false)
+    }
+  }
+  const shownPhoto = photo?.preview ?? (removePhoto ? null : shop?.imageUrl)
 
   type Field = keyof typeof form
   const set = (k: Field) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -88,14 +117,23 @@ export function ShopEditor({
         return setError((err as Error).message)
       }
     }
+    let imageData: FormData | null = null
+    if (photo || removePhoto) {
+      imageData = new FormData()
+      if (photo) imageData.set('image', photo.blob, 'foto.jpg')
+      else imageData.set('remove', '1')
+    }
     start(async () => {
-      const r = await saveShopAction({
-        id: shop?.id ?? null,
-        suggestionId: fromSuggestion ? suggestion.id : null,
-        shop: form,
-        scores,
-        fazit,
-      })
+      const r = await saveShopAction(
+        {
+          id: shop?.id ?? null,
+          suggestionId: fromSuggestion ? suggestion.id : null,
+          shop: form,
+          scores,
+          fazit,
+        },
+        imageData,
+      )
       if (r?.error) setError(r.error)
     })
   }
@@ -195,8 +233,35 @@ export function ShopEditor({
         </div>
 
         <div className="box">
-          <h2>Dein Urteil</h2>
-          <p className="hint">Leer lassen, wenn du noch nicht da warst. Sonst alle Kriterien setzen.</p>
+          <h2>Foto</h2>
+          <p className="hint">
+            Wird vor dem Hochladen im Browser verkleinert (max. {SHOP_IMAGE.maxSize} px, JPEG).
+          </p>
+          {shownPhoto && <img className="shop-photo" src={shownPhoto} alt="Vorschau" />}
+          {photo && <p className="hint">Neues Foto: {Math.round(photo.blob.size / 1024)} KB, wird beim Speichern hochgeladen.</p>}
+          <div className="actions">
+            <label className="btn">
+              {compressing ? 'Wird verkleinert …' : shownPhoto ? 'Anderes Foto wählen' : 'Foto wählen'}
+              <input type="file" accept="image/*" hidden disabled={compressing} onChange={onPhoto} />
+            </label>
+            {shownPhoto && (
+              <button
+                type="button"
+                className="linkish"
+                onClick={() => {
+                  setPhoto(null)
+                  setRemovePhoto(!!shop?.imageUrl)
+                }}
+              >
+                Foto entfernen
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="box">
+          <h2>Deine Bewertung</h2>
+          <p className="hint">Leer lassen, wenn du noch nicht da warst. Sonst alle Kriterien setzen. Zählt wie jede andere Community-Bewertung.</p>
           <ScoreInputs criteria={criteria} value={scores} onChange={setScores} />
           <p className="preview">
             Macht insgesamt: <Score value={complete ? ratingOverall(scores, criteria) : null} />{' '}
@@ -214,7 +279,7 @@ export function ShopEditor({
 
         {error && <p className="error">{error}</p>}
         <div className="actions">
-          <button className="btn primary" disabled={pending}>
+          <button className="btn primary" disabled={pending || compressing}>
             {shop ? 'Speichern' : 'Laden anlegen'}
           </button>
           <Link className="btn" href={shop ? `/laden/${shop.slug}` : '/admin'}>

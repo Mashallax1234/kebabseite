@@ -2,19 +2,36 @@
 // Die große Karte im Stil eines GTA-Pausenmenüs.
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { GeoJSONSource, Map as MlMap, Marker } from 'maplibre-gl'
-import { SITE } from '@/lib/config'
-import { fmtNum, fmtPrice, fmtScore } from '@/lib/format'
+import { NEARBY, SITE } from '@/lib/config'
+import { fmtNum, fmtPrice, fmtScore, plural } from '@/lib/format'
 import { gtaStyle } from '@/lib/gtaStyle'
 import { loadMaplibre } from '@/lib/loadMaplibre'
 import { MAP_LOCALE } from '@/lib/mapLocale'
 import { distanceKm } from '@/lib/validate'
-import type { Mode, RankedRow } from '@/lib/scores'
+import type { RankedRow } from '@/lib/scores'
 import type { Criterion } from '@/lib/data/types'
 
 type LatLng = { lat: number; lng: number }
 type MapLib = typeof import('maplibre-gl')
+
+const KM_PER_DEG_LAT = 111.32
+
+/** Ausdehnung eines Kreises in Grad (Längengrade werden zu den Polen hin schmaler) */
+function circleSpan(center: LatLng, km: number) {
+  return { dLat: km / KM_PER_DEG_LAT, dLng: km / (KM_PER_DEG_LAT * Math.cos((center.lat * Math.PI) / 180)) }
+}
+
+/** Kreis als Polygon für MapLibre (das kann von sich aus keine Kreise in Metern) */
+function circle(center: LatLng, km: number, steps = 64): GeoJSON.Feature {
+  const { dLat, dLng } = circleSpan(center, km)
+  const ring = Array.from({ length: steps + 1 }, (_, i) => {
+    const a = (i / steps) * 2 * Math.PI
+    return [center.lng + dLng * Math.cos(a), center.lat + dLat * Math.sin(a)]
+  })
+  return { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ring] } }
+}
 
 function blipKind(row: RankedRow) {
   const v = row.agg.overall
@@ -29,22 +46,20 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 const emptyLine: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
 
 export function GtaMap({
-  rankings,
+  ranking,
   criteria,
   username,
-  initialMode,
   initialSlug,
 }: {
-  rankings: Record<Mode, RankedRow[]>
+  ranking: RankedRow[]
   criteria: Criterion[]
   username: string | null
-  initialMode: Mode
   initialSlug: string | null
 }) {
   const router = useRouter()
-  const [mode, setMode] = useState<Mode>(initialMode)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [player, setPlayer] = useState<LatLng | null>(null)
+  const [nearby, setNearby] = useState(false) // nur Läden im Fußweg-Radius zeigen
   const [notice, setNotice] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
   const [legendOpen, setLegendOpen] = useState(true)
@@ -56,7 +71,10 @@ export function GtaMap({
   const markers = useRef(new Map<string, { marker: Marker; el: HTMLDivElement; base: string }>())
   const playerMarker = useRef<Marker | null>(null)
 
-  const rows = rankings[mode]
+  const rows = useMemo(
+    () => (nearby && player ? ranking.filter((r) => distanceKm(player, r.shop) <= NEARBY.radiusKm) : ranking),
+    [ranking, nearby, player],
+  )
   const selected = rows.find((r) => r.shop.id === selectedId) ?? null
   const rated = rows.filter((r) => r.rank != null)
   const avg = rated.length ? rated.reduce((s, r) => s + (r.agg.overall ?? 0), 0) / rated.length : null
@@ -75,7 +93,7 @@ export function GtaMap({
     const next = i < 0 ? (dir > 0 ? 0 : rows.length - 1) : (i + dir + rows.length) % rows.length
     select(rows[next].shop.id)
   }
-  function locate() {
+  function findPlayer(then: (p: LatLng) => void) {
     if (!navigator.geolocation) return setNotice('Dein Browser kann keinen Standort.')
     setNotice('Suche Standort …')
     navigator.geolocation.getCurrentPosition(
@@ -83,17 +101,38 @@ export function GtaMap({
         const p = { lat: pos.coords.latitude, lng: pos.coords.longitude }
         setPlayer(p)
         setNotice(null)
-        mapRef.current?.flyTo({ center: [p.lng, p.lat], zoom: 14, duration: 700 })
+        then(p)
       },
-      () => setNotice('Standort nicht verfügbar.'),
+      (err) => setNotice(err.code === err.PERMISSION_DENIED ? 'Standort-Freigabe abgelehnt.' : 'Standort nicht verfügbar.'),
       { enableHighAccuracy: true, timeout: 10000 },
     )
+  }
+  function locate() {
+    findPlayer((p) => mapRef.current?.flyTo({ center: [p.lng, p.lat], zoom: 14, duration: 700 }))
+  }
+  function toggleNearby() {
+    if (nearby) {
+      setNearby(false)
+      setNotice(null)
+      return
+    }
+    findPlayer((p) => {
+      setNearby(true)
+      const n = ranking.filter((r) => distanceKm(p, r.shop) <= NEARBY.radiusKm).length
+      if (!n) setNotice(`Kein Laden in ${NEARBY.minutes} Min. Fußweg. Zeit für einen Vorschlag?`)
+      const { dLat, dLng } = circleSpan(p, NEARBY.radiusKm)
+      const wide = window.innerWidth > 760
+      mapRef.current?.fitBounds(
+        [[p.lng - dLng, p.lat - dLat], [p.lng + dLng, p.lat + dLat]],
+        { padding: { top: wide ? 220 : 200, bottom: 70, left: 40, right: wide ? 340 : 40 }, duration: 700 },
+      )
+    })
   }
   const back = () => (selectedId ? setSelectedId(null) : router.push('/'))
 
   // Für Listener, die nur einmal registriert werden
-  const live = useRef({ select, step, locate, back, selected })
-  live.current = { select, step, locate, back, selected }
+  const live = useRef({ select, step, locate, toggleNearby, back, selected })
+  live.current = { select, step, locate, toggleNearby, back, selected }
 
   // Karte einmalig aufbauen
   useEffect(() => {
@@ -119,6 +158,14 @@ export function GtaMap({
       map.touchZoomRotate.disableRotation()
       map.addControl(new ml.AttributionControl({ compact: true }), 'bottom-left')
       map.on('load', () => {
+        map!.addSource('nearby', { type: 'geojson', data: emptyLine })
+        map!.addLayer({ id: 'nearby-fill', type: 'fill', source: 'nearby', paint: { 'fill-color': '#ff4f9a', 'fill-opacity': 0.08 } })
+        map!.addLayer({
+          id: 'nearby-edge',
+          type: 'line',
+          source: 'nearby',
+          paint: { 'line-color': '#ff4f9a', 'line-width': 2, 'line-dasharray': [2, 2] },
+        })
         map!.addSource('route', { type: 'geojson', data: emptyLine })
         map!.addLayer({
           id: 'route',
@@ -132,7 +179,7 @@ export function GtaMap({
       mapRef.current = map
 
       // Erstmal alle Läden ins Bild holen oder direkt den gewünschten anfliegen
-      const all = rankings.admin
+      const all = ranking
       const pre = initialSlug ? all.find((r) => r.shop.slug === initialSlug) : null
       if (pre) {
         live.current.select(pre.shop.id)
@@ -209,12 +256,18 @@ export function GtaMap({
     )
   }, [ready, player, selected])
 
+  // Fußweg-Radius um den Spieler
+  useEffect(() => {
+    const src = ready ? (mapRef.current?.getSource('nearby') as GeoJSONSource | undefined) : undefined
+    src?.setData(nearby && player ? circle(player, NEARBY.radiusKm) : emptyLine)
+  }, [ready, nearby, player])
+
   // Tastatur wie im Spiel
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const t = e.target as HTMLElement
       if (t.closest?.('input, textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return
-      const { selected: sel, step: go, locate: loc, back: esc } = live.current
+      const { selected: sel, step: go, locate: loc, toggleNearby: near, back: esc } = live.current
       const map = mapRef.current
       switch (e.key) {
         case 'Escape': esc(); break
@@ -223,6 +276,7 @@ export function GtaMap({
         case 'Enter': if (sel) router.push(`/laden/${sel.shop.slug}`); break
         case 'g': case 'G': if (sel) window.open(sel.shop.mapsUrl, '_blank', 'noopener'); break
         case 'p': case 'P': loc(); break
+        case 'n': case 'N': near(); break
         case 'l': case 'L': setLegendOpen((o) => !o); break
         case '+': case '=': map?.zoomIn(); break
         case '-': map?.zoomOut(); break
@@ -263,14 +317,14 @@ export function GtaMap({
       <div className="gta-title">
         <h1>Döner-Karte</h1>
         <p>
-          {SITE.city} · {rated.length} bewertet
+          {nearby ? `${NEARBY.minutes} Min. zu Fuß · ${plural(rows.length, 'Laden', 'Läden')}` : `${SITE.city} · ${rated.length} bewertet`}
         </p>
-        <div className="gta-switch" role="group" aria-label="Welches Ranking">
-          <button className={mode === 'admin' ? 'on' : ''} onClick={() => setMode('admin')}>
-            {SITE.admin}
+        <div className="gta-switch" role="group" aria-label="Welche Läden">
+          <button className={nearby ? '' : 'on'} onClick={() => nearby && toggleNearby()}>
+            Alle
           </button>
-          <button className={mode === 'community' ? 'on' : ''} onClick={() => setMode('community')}>
-            Community
+          <button className={nearby ? 'on' : ''} onClick={() => !nearby && toggleNearby()}>
+            In meiner Nähe · {NEARBY.minutes} Min
           </button>
         </div>
         {notice && <p className="gta-notice">{notice}</p>}
@@ -303,6 +357,7 @@ export function GtaMap({
 
       {selected && (
         <section className="gta-card">
+          {selected.shop.imageUrl && <img className="gta-photo" src={selected.shop.imageUrl} alt="" />}
           <div className="gta-card-head">
             <span className="gta-rank">{selected.rank ? '#' + selected.rank : '–'}</span>
             <div>
@@ -347,6 +402,7 @@ export function GtaMap({
 
       <footer className="gta-help">
         <button onClick={locate}><kbd>P</kbd>Meine Position</button>
+        <button onClick={toggleNearby}><kbd>N</kbd>{nearby ? 'Alle Läden' : `${NEARBY.minutes} Min. zu Fuß`}</button>
         <button onClick={() => step(1)}><kbd>←</kbd><kbd>→</kbd>Laden wechseln</button>
         <button onClick={() => mapRef.current?.zoomIn()}><kbd>+</kbd></button>
         <button onClick={() => mapRef.current?.zoomOut()}><kbd>−</kbd>Zoom</button>

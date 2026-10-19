@@ -14,6 +14,9 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Ladenfotos gehen über eine Server Action. Sie kommen schon verkleinert
+  // (~100–400 KB), das Limit lässt nur etwas Luft über den Standard von 1 MB.
+  experimental: { serverActions: { bodySizeLimit: '2mb' } },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }]
   },

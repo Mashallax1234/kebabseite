@@ -368,3 +368,56 @@ blockquote { margin: 14px 0 8px; padding: 0 0 0 14px; border-left: 4px solid var
 .crit-table input[type="text"], .crit-table input[type="number"] { padding: 4px 6px; font-size: 14px; }
 .crit-table td { vertical-align: top; }
 .editor .box { margin-bottom: 18px; }
+
+/* ---------- Ladenfoto ---------- */
+
+.shop-photo { display: block; width: 100%; max-width: 640px; aspect-ratio: 4 / 3; object-fit: cover; border: 2px solid var(--ink); margin: 0 0 14px; background: var(--paper-hi); }
+.two-col .minimap { margin: 0; }
+
+/* ---------- Ränge ---------- */
+
+.level-tag {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border: 1.5px solid var(--ink);
+  padding: 0 6px;
+  margin: 0 4px;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+.level-1 { background: var(--paper-hi); color: var(--muted); border-color: var(--rule); }
+.level-2 { background: var(--t-ok); }
+.level-3 { background: var(--t-good); }
+.level-4 { background: var(--t-top); }
+.level-5 { background: var(--yellow); transform: rotate(-2deg); box-shadow: 2px 2px 0 var(--ink); }
+.levels { list-style: none; padding: 0; margin: 0 0 14px; display: flex; flex-wrap: wrap; gap: 10px 18px; }
+.levels li { display: flex; align-items: baseline; gap: 2px; }
+.levels .level-tag { margin-left: 0; }
+.level-progress { max-width: 420px; margin: 10px 0; }
+.level-progress p { margin: 0 0 6px; }
+.level-progress .level-tag { margin-left: 0; font-size: 14px; }
+.level-bar { display: block; height: 10px; border: 2px solid var(--ink); background: var(--paper-hi); }
+.level-bar i { display: block; height: 100%; background: var(--yellow); }
+
+/* ---------- Community-Fotos ---------- */
+
+.photos { margin: 26px 0; }
+.photo-grid { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+.photo-grid li { display: flex; flex-direction: column; gap: 4px; }
+.photo-grid img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border: 2px solid var(--ink); background: var(--paper-hi); }
+.btn.disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---------- Profilbilder ---------- */
+
+.avatar { display: inline-flex; flex: none; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid var(--ink); object-fit: cover; background: var(--paper-hi); font-weight: 700; color: var(--ink); line-height: 1; vertical-align: middle; }
+.profile-title { display: flex; align-items: center; gap: 16px; }
+.profile-title h1 { margin: 0; }
+.profile-title p { margin: 4px 0 0; }
+.avatar-editor { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.avatar-editor .actions { margin: 0; }
+.fazit header { align-items: center; }
+.photo-meta { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.photo-meta .avatar { border-width: 1.5px; }

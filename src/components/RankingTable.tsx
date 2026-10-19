@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { fmtPrice, fmtScore } from '@/lib/format'
-import { tier, type Mode, type RankedRow } from '@/lib/scores'
+import { tier, type RankedRow } from '@/lib/scores'
 import type { Criterion } from '@/lib/data/types'
 
 type SortKey = 'rank' | 'name' | 'overall' | 'count' | string
@@ -16,17 +16,7 @@ function valueOf(row: RankedRow, key: SortKey): number | string | null {
   return row.agg.perCriterion[key] ?? null
 }
 
-export function RankingTable({
-  mode,
-  rows,
-  criteria,
-  tabs,
-}: {
-  mode: Mode
-  rows: RankedRow[]
-  criteria: Criterion[]
-  tabs: Record<Mode, string>
-}) {
+export function RankingTable({ rows, criteria }: { rows: RankedRow[]; criteria: Criterion[] }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'rank', dir: 1 })
@@ -62,12 +52,10 @@ export function RankingTable({
     <>
       <div className="toolbar">
         <nav className="tabs">
-          <Link href="/" className={mode === 'admin' ? 'active' : ''}>
-            {tabs.admin}
+          <Link href="/" className="active">
+            Community-Ranking
           </Link>
-          <Link href="/?ansicht=community" className={mode === 'community' ? 'active' : ''}>
-            {tabs.community}
-          </Link>
+          <Link href="/karte">Karte</Link>
         </nav>
         <input
           type="search"
@@ -86,7 +74,7 @@ export function RankingTable({
               {th('name', 'Laden')}
               {criteria.map((c) => th(c.key, c.label, 'num col-crit'))}
               {th('overall', 'Gesamt', 'num')}
-              {mode === 'community' && th('count', 'Stimmen', 'num col-count')}
+              {th('count', 'Stimmen', 'num col-count')}
             </tr>
           </thead>
           <tbody>
@@ -107,7 +95,7 @@ export function RankingTable({
                   </td>
                 ))}
                 <td className={`num col-total tier-${tier(r.agg.overall)}`}>{fmtScore(r.agg.overall)}</td>
-                {mode === 'community' && <td className="num col-count">{r.agg.count}</td>}
+                <td className="num col-count">{r.agg.count}</td>
               </tr>
             ))}
             {!visible.length && (
@@ -120,7 +108,7 @@ export function RankingTable({
           </tbody>
         </table>
       </div>
-      {mode === 'community' && <p className="muted small">Läden ohne Community-Bewertung stehen unten ohne Platz.</p>}
+      <p className="muted small">Läden ohne Bewertung stehen unten ohne Platz.</p>
     </>
   )
 }

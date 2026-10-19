@@ -25,7 +25,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
           <p>{SITE.name} · alle Bewertungen sind persönliche Meinung · kein Laden hat hier für irgendwas bezahlt</p>
           {demo && (
             <div className="demo-note">
-              Demo-Modus: Daten liegen in <code>.data/demo.json</code>. Admin-Login: <code>hallahsam@demo.de</code> /{' '}
+              Demo-Modus: Daten liegen in <code>.data/demo.json</code>. Admin-Login: <code>admin@demo.de</code> /{' '}
               <code>demo</code>.{' '}
               <form action={resetDemoAction}>
                 <button className="linkish">Demo zurücksetzen</button>

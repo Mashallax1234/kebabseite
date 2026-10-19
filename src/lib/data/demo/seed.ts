@@ -26,6 +26,15 @@ export interface DemoSuggestion {
   reviewedAt: string | null
 }
 
+export interface DemoPhoto {
+  id: string
+  shopId: string
+  userId: string
+  /** data:-URL, im Demo-Modus gibt es keinen Speicher-Bucket */
+  url: string
+  createdAt: string
+}
+
 export interface DemoDb {
   users: { id: string; email: string; password: string }[]
   profiles: Profile[]
@@ -33,6 +42,7 @@ export interface DemoDb {
   shops: Shop[]
   ratings: DemoRating[]
   suggestions: DemoSuggestion[]
+  photos: DemoPhoto[]
 }
 
 const CRITERIA: Criterion[] = [
@@ -44,7 +54,7 @@ const CRITERIA: Criterion[] = [
 
 type UserRow = [username: string, displayName: string | null, bio: string | null, role: 'user' | 'admin']
 const USERS: UserRow[] = [
-  ['Hallahsam', 'Hallahsam', 'Hab jeden Döner in der Gegend gegessen. Manche zweimal. Manche leider auch.', 'admin'],
+  ['admin', 'Admin', 'Pflegt die Läden und schaut über die Vorschläge. Isst natürlich auch mit.', 'admin'],
   ['kalle_k', 'Kalle', 'Soße ist wichtiger als Fleisch. Diskutier ich gern aus.', 'user'],
   ['sanne', 'Sanne', 'Immer mit scharf.', 'user'],
   ['mo.b', 'Mo', 'Wohne quasi im Kapadokya.', 'user'],
@@ -115,6 +125,7 @@ export function seedData(): DemoDb {
     displayName,
     bio,
     role,
+    avatarUrl: null,
     createdAt: iso('2025-01-05'),
   }))
 
@@ -129,6 +140,7 @@ export function seedData(): DemoDb {
     mapsUrl: `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`,
     doenerPrice: price,
     notes: null,
+    imageUrl: null,
     createdAt: iso(tested),
     updatedAt: iso(tested),
   }))
@@ -138,7 +150,7 @@ export function seedData(): DemoDb {
     ...SHOPS.map(([slug, , , , , , , scores, fazit, tested]) => ({
       id: 'r' + ++n,
       shopId: 'shop-' + slug,
-      userId: userId('Hallahsam'),
+      userId: userId('admin'),
       scores: toScores(scores),
       fazit,
       createdAt: iso(tested),
@@ -174,5 +186,5 @@ export function seedData(): DemoDb {
     },
   ]
 
-  return { users, profiles, criteria: CRITERIA.map((c) => ({ ...c })), shops, ratings, suggestions }
+  return { users, profiles, criteria: CRITERIA.map((c) => ({ ...c })), shops, ratings, suggestions, photos: [] }
 }

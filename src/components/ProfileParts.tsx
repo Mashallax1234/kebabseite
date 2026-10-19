@@ -1,25 +1,40 @@
 import Link from 'next/link'
+import { cache } from 'react'
 import { getBackend } from '@/lib/data'
+import { rankFor, xpFor } from '@/lib/levels'
 import { ratingOverall } from '@/lib/scores'
 import { fmtDate, fmtScore, nameOf, plural } from '@/lib/format'
 import type { Profile } from '@/lib/data/types'
+import { Avatar } from './Avatar'
+import { LevelProgress } from './LevelTag'
 import { Score } from './ui'
 
-export function ProfileHead({ profile }: { profile: Profile }) {
+/** Kopf und Liste brauchen dieselben Bewertungen – pro Request nur einmal laden */
+const loadRatings = cache(async (userId: string) => (await getBackend()).listRatingsByUser(userId))
+
+export async function ProfileHead({ profile }: { profile: Profile }) {
+  const [ratings, photos] = await Promise.all([loadRatings(profile.id), (await getBackend()).listAllPhotos()])
+  const photoCount = photos.filter((p) => p.userId === profile.id).length
+  const rank = rankFor(xpFor(ratings.map((r) => ({ hasFazit: !!r.fazit?.trim() })), photoCount))
   return (
     <header className="profile-head">
-      <h1>{nameOf(profile)}</h1>
-      <p className="muted">
-        @{profile.username} {profile.role === 'admin' && <span className="tag">Admin</span>} · dabei seit {fmtDate(profile.createdAt)}
-      </p>
+      <div className="profile-title">
+        <Avatar person={profile} size={84} />
+        <div>
+          <h1>{nameOf(profile)}</h1>
+          <p className="muted">
+            @{profile.username} {profile.role === 'admin' && <span className="tag">Admin</span>} · dabei seit {fmtDate(profile.createdAt)}
+          </p>
+        </div>
+      </div>
+      <LevelProgress rank={rank} />
       {profile.bio && <p className="bio">{profile.bio}</p>}
     </header>
   )
 }
 
 export async function RatingsOfUser({ userId }: { userId: string }) {
-  const backend = await getBackend()
-  const [ratings, criteria] = await Promise.all([backend.listRatingsByUser(userId), backend.listCriteria()])
+  const [ratings, criteria] = await Promise.all([loadRatings(userId), (await getBackend()).listCriteria()])
   if (!ratings.length) return <p className="muted">Noch keine Bewertungen.</p>
   const overalls = ratings.map((r) => ratingOverall(r.scores, criteria)).filter((v): v is number => v != null)
   const avg = overalls.length ? overalls.reduce((a, b) => a + b, 0) / overalls.length : null

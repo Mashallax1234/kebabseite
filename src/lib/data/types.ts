@@ -18,6 +18,8 @@ export interface Profile {
   displayName: string | null
   bio: string | null
   role: Role
+  /** Öffentliche URL des Profilbilds (wird nur über `setMyAvatar` gesetzt) */
+  avatarUrl: string | null
   createdAt: string
 }
 
@@ -40,11 +42,35 @@ export interface Shop {
   mapsUrl: string
   doenerPrice: number | null
   notes: string | null
+  /** Öffentliche URL des Ladenfotos (wird nur über `setShopImage` gesetzt) */
+  imageUrl: string | null
   createdAt: string
   updatedAt: string
 }
 
-export type ShopInput = Omit<Shop, 'id' | 'createdAt' | 'updatedAt'>
+export type ShopInput = Omit<Shop, 'id' | 'imageUrl' | 'createdAt' | 'updatedAt'>
+
+/** Foto eines Nutzers in der Galerie eines Ladens */
+export interface ShopPhoto {
+  id: string
+  shopId: string
+  userId: string
+  url: string
+  createdAt: string
+  author: { username: string; displayName: string | null; avatarUrl: string | null } | null
+}
+
+/** Schlanke Variante für die Punkte */
+export interface PhotoLite {
+  shopId: string
+  userId: string
+}
+
+/** Bereits im Browser verkleinertes JPEG */
+export interface ImageUpload {
+  bytes: Uint8Array
+  contentType: 'image/jpeg'
+}
 
 /** z. B. { preis: 8, auswahl: 7.5, sosse: 9, fleisch: 8 } */
 export type Scores = Record<string, number>
@@ -53,6 +79,7 @@ export interface Author {
   username: string
   displayName: string | null
   role: Role
+  avatarUrl: string | null
 }
 
 export interface Rating {
@@ -67,11 +94,12 @@ export interface Rating {
   shop?: { name: string; slug: string } | null
 }
 
-/** Schlanke Variante für die Rankings */
+/** Schlanke Variante für Rankings und Punkte */
 export interface RatingLite {
   shopId: string
+  userId: string
   scores: Scores
-  authorRole: Role
+  hasFazit: boolean
 }
 
 export type SuggestionStatus = 'pending' | 'approved' | 'rejected'
@@ -121,6 +149,8 @@ export interface Backend {
   // Profile
   getProfileByUsername(username: string): Promise<Profile | null>
   updateMyProfile(input: { displayName: string | null; bio: string | null }): Promise<void>
+  /** Eigenes Profilbild hochladen (ersetzt ein altes) oder mit `null` entfernen */
+  setMyAvatar(image: ImageUpload | null): Promise<void>
   isUsernameTaken(username: string): Promise<boolean>
 
   // Kriterien
@@ -134,6 +164,14 @@ export interface Backend {
   createShop(input: ShopInput): Promise<Shop>
   updateShop(id: string, input: ShopInput): Promise<Shop>
   deleteShop(id: string): Promise<void>
+  /** Foto hochladen (ersetzt ein altes) oder mit `null` entfernen. Liefert die neue URL. */
+  setShopImage(shopId: string, image: ImageUpload | null): Promise<string | null>
+
+  // Fotos aus der Community (jeder eingeloggte Nutzer; löschen: eigene + Admins)
+  listPhotosForShop(shopId: string): Promise<ShopPhoto[]>
+  listAllPhotos(): Promise<PhotoLite[]>
+  addMyShopPhoto(shopId: string, image: ImageUpload): Promise<void>
+  deleteShopPhoto(photoId: string): Promise<void>
 
   // Bewertungen (eine pro Nutzer und Laden)
   listAllRatings(): Promise<RatingLite[]>

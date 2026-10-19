@@ -2,7 +2,7 @@
 // Alles Supabase-Spezifische bleibt in diesem Ordner.
 import 'server-only'
 import type { PostgrestError } from '@supabase/supabase-js'
-import { createSupabase } from './client'
+import { createSupabase, supabaseEnv } from './client'
 import {
   BackendError,
   type Backend,
@@ -18,8 +18,17 @@ type Row = Record<string, any>
 
 const PAGE = 1000 // PostgREST liefert standardmäßig max. 1000 Zeilen pro Anfrage
 
+const AVATAR_BUCKET = 'avatars'
+
+/** In der Tabelle steht nur der Pfad im Bucket (der lässt sich per Check-Constraint prüfen, eine URL nicht) */
+const avatarUrl = (path: string | null | undefined) =>
+  path ? `${supabaseEnv().url}/storage/v1/object/public/${AVATAR_BUCKET}/${path}` : null
+
 const mapProfile = (r: Row | null): Profile | null =>
-  r && { id: r.id, username: r.username, displayName: r.display_name, bio: r.bio, role: r.role, createdAt: r.created_at }
+  r && {
+    id: r.id, username: r.username, displayName: r.display_name, bio: r.bio, role: r.role,
+    avatarUrl: avatarUrl(r.avatar_path), createdAt: r.created_at,
+  }
 
 const mapCriterion = (r: Row): Criterion => ({
   key: r.key, label: r.label, description: r.description, sortOrder: r.sort_order, active: r.active,
@@ -29,8 +38,10 @@ const mapShop = (r: Row | null): Shop | null =>
   r && {
     id: r.id, slug: r.slug, name: r.name, address: r.address, district: r.district, lat: r.lat, lng: r.lng,
     mapsUrl: r.maps_url, doenerPrice: r.doener_price == null ? null : Number(r.doener_price), notes: r.notes,
-    createdAt: r.created_at, updatedAt: r.updated_at,
+    imageUrl: r.image_url ?? null, createdAt: r.created_at, updatedAt: r.updated_at,
   }
+
+const IMAGE_BUCKET = 'shop-images'
 
 const shopRow = (i: ShopInput) => ({
   slug: i.slug, name: i.name, address: i.address, district: i.district, lat: i.lat, lng: i.lng,
@@ -40,7 +51,9 @@ const shopRow = (i: ShopInput) => ({
 const mapRating = (r: Row): Rating => ({
   id: r.id, shopId: r.shop_id, userId: r.user_id, scores: r.scores, fazit: r.fazit,
   createdAt: r.created_at, updatedAt: r.updated_at,
-  author: r.author ? { username: r.author.username, displayName: r.author.display_name, role: r.author.role } : null,
+  author: r.author
+    ? { username: r.author.username, displayName: r.author.display_name, role: r.author.role, avatarUrl: avatarUrl(r.author.avatar_path) }
+    : null,
   shop: r.shop ? { name: r.shop.name, slug: r.shop.slug } : null,
 })
 
@@ -50,7 +63,7 @@ const mapSuggestion = (r: Row): Suggestion => ({
   status: r.status, adminNote: r.admin_note, shopId: r.shop_id, createdAt: r.created_at, reviewedAt: r.reviewed_at,
 })
 
-const RATING_SELECT = '*, author:profiles(username, display_name, role)'
+const RATING_SELECT = '*, author:profiles(username, display_name, role, avatar_path)'
 const SUGGESTION_SELECT = '*, suggester:profiles!suggestions_suggested_by_fkey(username, display_name)'
 
 function germanError(error: { message?: string } | null | undefined): BackendError {
@@ -104,6 +117,14 @@ export async function createSupabaseBackend(): Promise<Backend> {
       if (rows.length < PAGE) return out
     }
   }
+  async function removeShopImages(shopId: string) {
+    const { data, error } = await sb.storage.from(IMAGE_BUCKET).list(shopId)
+    if (error) throw germanError(error)
+    if (data?.length) {
+      const { error: rmError } = await sb.storage.from(IMAGE_BUCKET).remove(data.map((f) => `${shopId}/${f.name}`))
+      if (rmError) throw germanError(rmError)
+    }
+  }
 
   return {
     kind: 'supabase',
@@ -150,6 +171,24 @@ export async function createSupabaseBackend(): Promise<Backend> {
       const id = await needUserId()
       unwrap(await sb.from('profiles').update({ display_name: displayName, bio }).eq('id', id))
     },
+    async setMyAvatar(image) {
+      const id = await needUserId()
+      const bucket = sb.storage.from(AVATAR_BUCKET)
+      // Alte Bilder weg, neues unter eindeutigem Namen (kein Cache-Ärger)
+      const { data: old, error: listError } = await bucket.list(id)
+      if (listError) throw germanError(listError)
+      let path: string | null = null
+      if (image) {
+        path = `${id}/${Date.now()}.jpg`
+        const { error } = await bucket.upload(path, image.bytes, { contentType: image.contentType, upsert: false })
+        if (error) throw germanError(error)
+      }
+      unwrap(await sb.from('profiles').update({ avatar_path: path }).eq('id', id))
+      if (old?.length) {
+        const { error } = await bucket.remove(old.map((f) => `${id}/${f.name}`))
+        if (error) console.error('[supabase] altes Profilbild nicht gelöscht', error)
+      }
+    },
     async isUsernameTaken(username) {
       const pattern = username.replace(/[\\%_]/g, '\\$&')
       const { count, error } = await sb.from('profiles').select('id', { count: 'exact', head: true }).ilike('username', pattern)
@@ -185,13 +224,69 @@ export async function createSupabaseBackend(): Promise<Backend> {
       return mapShop(unwrap(await sb.from('shops').update(shopRow(input)).eq('id', id).select().single()))!
     },
     async deleteShop(id) {
+      // Pfade der Community-Fotos merken, bevor die Zeilen per Cascade verschwinden
+      const photos = unwrap(await sb.from('shop_photos').select('path').eq('shop_id', id)) as Row[]
       unwrap(await sb.from('shops').delete().eq('id', id))
+      if (photos.length) {
+        const { error } = await sb.storage.from(IMAGE_BUCKET).remove(photos.map((p) => p.path))
+        if (error) console.error('[supabase] Community-Fotos nicht gelöscht', error)
+      }
+      // Laden ist weg – verwaiste Fotos sind dann nur noch Aufräumarbeit
+      await removeShopImages(id).catch((e) => console.error('[supabase] Fotos nicht gelöscht', e))
+    },
+    async setShopImage(shopId, image) {
+      // Alte Fotos des Ladens weg, neues unter eindeutigem Namen (kein Cache-Ärger)
+      await removeShopImages(shopId)
+      let url: string | null = null
+      if (image) {
+        const path = `${shopId}/${Date.now()}.jpg`
+        const { error } = await sb.storage.from(IMAGE_BUCKET).upload(path, image.bytes, { contentType: image.contentType, upsert: false })
+        if (error) throw germanError(error)
+        url = sb.storage.from(IMAGE_BUCKET).getPublicUrl(path).data.publicUrl
+      }
+      unwrap(await sb.from('shops').update({ image_url: url }).eq('id', shopId))
+      return url
+    },
+
+    // ---------- Community-Fotos ----------
+    async listPhotosForShop(shopId) {
+      const rows = unwrap(
+        await sb.from('shop_photos').select('*, author:profiles(username, display_name, avatar_path)').eq('shop_id', shopId).order('created_at', { ascending: false }),
+      ) as Row[]
+      return rows.map((r) => ({
+        id: r.id, shopId: r.shop_id, userId: r.user_id, createdAt: r.created_at,
+        url: sb.storage.from(IMAGE_BUCKET).getPublicUrl(r.path).data.publicUrl,
+        author: r.author ? { username: r.author.username, displayName: r.author.display_name, avatarUrl: avatarUrl(r.author.avatar_path) } : null,
+      }))
+    },
+    async listAllPhotos() {
+      const rows = await fetchAll(() => sb.from('shop_photos').select('id, shop_id, user_id').order('id'))
+      return rows.map((r) => ({ shopId: r.shop_id, userId: r.user_id }))
+    },
+    async addMyShopPhoto(shopId, image) {
+      const userId = await needUserId()
+      // Erst die Zeile (Trigger prüft die Limits), dann die Datei – schlägt der Upload fehl, Zeile wieder weg
+      const path = `community/${shopId}/${userId}/${Date.now()}.jpg`
+      const row = unwrap(await sb.from('shop_photos').insert({ shop_id: shopId, user_id: userId, path }).select('id').single()) as Row
+      const { error } = await sb.storage.from(IMAGE_BUCKET).upload(path, image.bytes, { contentType: image.contentType, upsert: false })
+      if (error) {
+        await sb.from('shop_photos').delete().eq('id', row.id)
+        throw germanError(error)
+      }
+    },
+    async deleteShopPhoto(photoId) {
+      if (!/^[0-9a-f-]{36}$/i.test(photoId)) throw new BackendError('Foto nicht gefunden.')
+      // RLS lässt nur eigene Fotos (oder Admins) durch – ohne Treffer kommt nichts zurück
+      const rows = unwrap(await sb.from('shop_photos').delete().eq('id', photoId).select('path')) as Row[]
+      if (!rows.length) throw new BackendError('Foto nicht gefunden oder nicht deins.')
+      const { error } = await sb.storage.from(IMAGE_BUCKET).remove(rows.map((r) => r.path))
+      if (error) console.error('[supabase] Foto-Datei nicht gelöscht', error)
     },
 
     // ---------- Bewertungen ----------
     async listAllRatings() {
-      const rows = await fetchAll(() => sb.from('ratings').select('id, shop_id, scores, author:profiles(role)').order('id'))
-      return rows.map((r) => ({ shopId: r.shop_id, scores: r.scores, authorRole: r.author?.role ?? 'user' }))
+      const rows = await fetchAll(() => sb.from('ratings').select('id, shop_id, user_id, scores, fazit').order('id'))
+      return rows.map((r) => ({ shopId: r.shop_id, userId: r.user_id, scores: r.scores, hasFazit: !!r.fazit?.trim() }))
     },
     async listRatingsForShop(shopId) {
       const rows = unwrap(await sb.from('ratings').select(RATING_SELECT).eq('shop_id', shopId).order('updated_at', { ascending: false }))

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { logoutAction } from '@/app/actions'
+import { AvatarEditor } from '@/components/AvatarEditor'
 import { ProfileForm } from '@/components/forms'
 import { ProfileHead, RatingsOfUser } from '@/components/ProfileParts'
 import { NeedLogin } from '@/components/ui'
@@ -32,6 +33,9 @@ export default async function MyProfilePage() {
           <button className="btn">Ausloggen</button>
         </form>
       </div>
+
+      <h2>Profilbild</h2>
+      <AvatarEditor profile={user} />
 
       <h2>Profil bearbeiten</h2>
       <ProfileForm displayName={user.displayName ?? ''} bio={user.bio ?? ''} />

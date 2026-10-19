@@ -289,3 +289,9 @@
   .gta-card { left: 0; right: 0; bottom: 0; width: auto; }
   .gta-help { display: none; }
 }
+
+/* Ladenfoto in der Info-Karte */
+.gta-photo { display: block; width: calc(100% + 32px); margin: -12px -16px 10px; aspect-ratio: 16 / 9; object-fit: cover; }
+@media (max-width: 760px) {
+  .gta-photo { aspect-ratio: 21 / 9; }
+}
