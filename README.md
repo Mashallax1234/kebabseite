@@ -1,4 +1,4 @@
-# Hallahsams Dönerliste
+# Mashallas Dönerliste
 
 Ranking aller Dönerläden in der Gegend: Hallahsams eigenes Ranking, ein Community-Ranking aus den Nutzerbewertungen, eine Seite pro Laden mit Google-Maps-Navigation und eine Karte im GTA-Pausenmenü-Stil.
 
