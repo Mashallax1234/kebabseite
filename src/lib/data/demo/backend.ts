@@ -145,7 +145,8 @@ export function createDemoBackend(): Backend {
     isUsernameTaken: async (username) => db().profiles.some((p) => sameName(p.username, username)),
 
     // ---------- Kriterien ----------
-    listCriteria: async () => clone(db().criteria),
+    // Alte Demo-Daten kennen noch kein Gewicht -> Standard 1
+    listCriteria: async () => clone(db().criteria).map((c) => ({ ...c, weight: c.weight ?? 1 })),
     async saveCriterion(c) {
       await needAdmin()
       const list = db().criteria

@@ -66,6 +66,7 @@ export const criterionSchema = z.object({
   description: optText(120),
   sortOrder: z.coerce.number().int(),
   active: z.boolean(),
+  weight: z.coerce.number().min(0, 'Gewicht: 0 bis 10').max(10, 'Gewicht: 0 bis 10'),
 })
 
 export const fazitSchema = optText(2000)

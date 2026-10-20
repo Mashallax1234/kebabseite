@@ -38,6 +38,17 @@ function Row({ initial, isNew }: { initial: Criterion; isNew?: boolean }) {
         <input type="number" className="short" value={row.sortOrder} onChange={(e) => set('sortOrder', Number(e.target.value))} />
       </td>
       <td>
+        <input
+          type="number"
+          className="short"
+          min={0}
+          max={10}
+          step={0.5}
+          value={row.weight}
+          onChange={(e) => set('weight', Number(e.target.value))}
+        />
+      </td>
+      <td>
         <input type="checkbox" checked={row.active} onChange={(e) => set('active', e.target.checked)} />
       </td>
       <td>
@@ -62,6 +73,7 @@ export function CriteriaEditor({ criteria }: { criteria: Criterion[] }) {
             <th>Name</th>
             <th>Beschreibung</th>
             <th>Reihenf.</th>
+            <th>Gewicht</th>
             <th>aktiv</th>
             <th />
           </tr>
@@ -70,7 +82,7 @@ export function CriteriaEditor({ criteria }: { criteria: Criterion[] }) {
           {criteria.map((c) => (
             <Row key={c.key} initial={c} />
           ))}
-          <Row key={'new-' + criteria.length} isNew initial={{ key: '', label: '', description: '', sortOrder: nextSort, active: true }} />
+          <Row key={'new-' + criteria.length} isNew initial={{ key: '', label: '', description: '', sortOrder: nextSort, active: true, weight: 1 }} />
         </tbody>
       </table>
     </div>
