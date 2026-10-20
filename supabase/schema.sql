@@ -101,8 +101,12 @@ create table if not exists public.criteria (
   label       text not null,
   description text,
   sort_order  int not null default 0,
-  active      boolean not null default true
+  active      boolean not null default true,
+  weight      numeric(4, 2) not null default 1 check (weight >= 0 and weight <= 10)
 );
+
+-- Für bestehende Datenbanken (schadet bei neuen nicht):
+alter table public.criteria add column if not exists weight numeric(4, 2) not null default 1 check (weight >= 0 and weight <= 10);
 
 insert into public.criteria (key, label, description, sort_order) values
   ('preis',   'Preis',   'Was bekommt man fürs Geld?',                 1),

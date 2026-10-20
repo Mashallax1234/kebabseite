@@ -32,6 +32,7 @@ const mapProfile = (r: Row | null): Profile | null =>
 
 const mapCriterion = (r: Row): Criterion => ({
   key: r.key, label: r.label, description: r.description, sortOrder: r.sort_order, active: r.active,
+  weight: r.weight == null ? 1 : Number(r.weight),
 })
 
 const mapShop = (r: Row | null): Shop | null =>
@@ -202,7 +203,7 @@ export async function createSupabaseBackend(): Promise<Backend> {
     },
     async saveCriterion(c) {
       unwrap(await sb.from('criteria').upsert({
-        key: c.key, label: c.label, description: c.description, sort_order: c.sortOrder, active: c.active,
+        key: c.key, label: c.label, description: c.description, sort_order: c.sortOrder, active: c.active, weight: c.weight,
       }))
     },
 

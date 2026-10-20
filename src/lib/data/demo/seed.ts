@@ -46,10 +46,10 @@ export interface DemoDb {
 }
 
 const CRITERIA: Criterion[] = [
-  { key: 'preis', label: 'Preis', description: 'Was bekommt man fürs Geld?', sortOrder: 1, active: true },
-  { key: 'auswahl', label: 'Auswahl', description: 'Fleisch, Brot, Beilagen, Extras', sortOrder: 2, active: true },
-  { key: 'sosse', label: 'Soße(n)', description: 'Geschmack, Menge, selbstgemacht oder Eimer', sortOrder: 3, active: true },
-  { key: 'fleisch', label: 'Fleisch', description: 'Qualität, Würzung, saftig oder trocken', sortOrder: 4, active: true },
+  { key: 'preis', label: 'Preis', description: 'Was bekommt man fürs Geld?', sortOrder: 1, active: true, weight: 1 },
+  { key: 'auswahl', label: 'Auswahl', description: 'Fleisch, Brot, Beilagen, Extras', sortOrder: 2, active: true, weight: 1 },
+  { key: 'sosse', label: 'Soße(n)', description: 'Geschmack, Menge, selbstgemacht oder Eimer', sortOrder: 3, active: true, weight: 1 },
+  { key: 'fleisch', label: 'Fleisch', description: 'Qualität, Würzung, saftig oder trocken', sortOrder: 4, active: true, weight: 1 },
 ]
 
 type UserRow = [username: string, displayName: string | null, bio: string | null, role: 'user' | 'admin']

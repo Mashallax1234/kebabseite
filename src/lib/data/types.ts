@@ -29,6 +29,8 @@ export interface Criterion {
   description: string | null
   sortOrder: number
   active: boolean
+  /** Gewicht in der Gesamtnote (0 = zählt nicht, 1 = normal, 2 = doppelt …) */
+  weight: number
 }
 
 export interface Shop {

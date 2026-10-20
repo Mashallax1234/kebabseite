@@ -72,7 +72,7 @@ export default async function AdminPage() {
       <section>
         <h2>Kriterien</h2>
         <p className="small">
-          Neue Kriterien zählen sofort mit. Ältere Bewertungen, die das neue Kriterium noch nicht haben, werden über die vorhandenen
+          Das <b>Gewicht</b> bestimmt, wie stark ein Kriterium in die Gesamtnote eingeht: 1 = normal, 2 = doppelt, 0 = zählt nicht. Neue Kriterien zählen sofort mit. Ältere Bewertungen, die das neue Kriterium noch nicht haben, werden über die vorhandenen
           Kriterien gemittelt. Deaktivierte Kriterien fallen aus allen Noten raus, die Werte bleiben aber gespeichert.
         </p>
         <CriteriaEditor criteria={criteria} />

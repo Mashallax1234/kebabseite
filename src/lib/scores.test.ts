@@ -6,7 +6,7 @@ import { coordsFromMapsUrl, shopSchema, validateScores } from './validate'
 import { slugify } from './format'
 import type { Criterion, RatingLite, Shop } from './data/types'
 
-const crit = (key: string, active = true, sortOrder = 0): Criterion => ({ key, label: key, description: null, sortOrder, active })
+const crit = (key: string, active = true, sortOrder = 0): Criterion => ({ key, label: key, description: null, sortOrder, active, weight: 1 })
 const criteria = [crit('preis', true, 1), crit('auswahl', true, 2), crit('sosse', true, 3), crit('fleisch', true, 4)]
 const shop = (id: string, name = id): Shop => ({
   id, slug: id, name, address: 'x', district: null, lat: 0, lng: 0, mapsUrl: 'https://maps.app.goo.gl/x',
@@ -33,6 +33,21 @@ describe('Gesamtnote', () => {
     expect(agg.perCriterion.preis).toBe(7)
     expect(agg.overall).toBe(7)
     expect(agg.count).toBe(2)
+  })
+})
+
+describe('Gewichtung', () => {
+  const weighted = [{ ...crit('preis', true, 1), weight: 1 }, { ...crit('fleisch', true, 2), weight: 3 }]
+  it('zählt ein Kriterium mit Gewicht 3 dreifach', () => {
+    // (4*1 + 8*3) / 4 = 7
+    expect(ratingOverall({ preis: 4, fleisch: 8 }, weighted)).toBe(7)
+  })
+  it('Gewicht 0 lässt ein Kriterium aus der Gesamtnote', () => {
+    const c = [{ ...crit('preis', true, 1), weight: 0 }, { ...crit('fleisch', true, 2), weight: 1 }]
+    expect(ratingOverall({ preis: 1, fleisch: 9 }, c)).toBe(9)
+  })
+  it('ohne Gewichte (alle 1) bleibt es der einfache Durchschnitt', () => {
+    expect(ratingOverall({ preis: 6, fleisch: 8 }, [crit('preis', true, 1), crit('fleisch', true, 2)])).toBe(7)
   })
 })
 

@@ -20,15 +20,22 @@ export const activeCriteria = (criteria: Criterion[]) =>
   criteria.filter((c) => c.active).sort((a, b) => a.sortOrder - b.sortOrder)
 
 /**
- * Gesamtnote einer Bewertung = Durchschnitt der aktiven Kriterien, die darin
- * vorkommen. Kommt später ein Kriterium dazu, werden alte Bewertungen über
+ * Gesamtnote einer Bewertung = gewichteter Durchschnitt der aktiven Kriterien,
+ * die darin vorkommen (Gewicht pro Kriterium, siehe Admin). Kommt später ein Kriterium dazu, werden alte Bewertungen über
  * die vorhandenen Kriterien gemittelt.
  */
 export function ratingOverall(scores: Scores | null | undefined, criteria: Criterion[]): number | null {
-  const vals = activeCriteria(criteria)
-    .map((c) => scores?.[c.key])
-    .filter((v): v is number => typeof v === 'number')
-  return vals.length ? mean(vals) : null
+  let sum = 0
+  let total = 0
+  for (const c of activeCriteria(criteria)) {
+    const v = scores?.[c.key]
+    const w = c.weight ?? 1
+    if (typeof v === 'number' && w > 0) {
+      sum += v * w
+      total += w
+    }
+  }
+  return total > 0 ? sum / total : null
 }
 
 export function aggregate(ratings: { scores: Scores }[], criteria: Criterion[]): Aggregate {

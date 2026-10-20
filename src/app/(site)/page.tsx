@@ -54,7 +54,11 @@ export default async function RankingPage() {
           ))}
           <div>
             <dt>Gesamt</dt>
-            <dd>Durchschnitt aller Kriterien, gemittelt über alle Bewertungen. Keine Gewichtung, kein Hokuspokus.</dd>
+            <dd>
+              {crit.every((c) => c.weight === crit[0].weight)
+                ? 'Durchschnitt aller Kriterien, gemittelt über alle Bewertungen. Alle zählen gleich viel.'
+                : 'Gewichteter Durchschnitt, gemittelt über alle Bewertungen: ' + crit.map((c) => `${c.label} ${c.weight}×`).join(', ') + '.'}
+            </dd>
           </div>
         </dl>
         <p className="legend">
