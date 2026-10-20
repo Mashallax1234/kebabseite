@@ -27,10 +27,10 @@ export const PHOTOS_PER_USER_AND_SHOP = 5
 export const XP = { rating: 3, fazit: 2, photo: 2 }
 export const LEVELS = [
   { level: 1, name: 'Karlsruher', min: 0 },
-  { level: 2, name: 'Gelegenheitsdöner', min: 6 },
-  { level: 3, name: 'Macher', min: 21 },
-  { level: 4, name: 'Experte', min: 51 },
-  { level: 5, name: 'Jumbo', min: 101 },
+  { level: 2, name: 'Gelegenheitsdöner', min: 15 },
+  { level: 3, name: 'Macher', min: 35 },
+  { level: 4, name: 'Experte', min: 60 },
+  { level: 5, name: 'Jumbo', min: 120 },
 ] as const
 
 // Kartendaten von OpenFreeMap: kostenlos, ohne API-Key, ohne Anmeldung.
